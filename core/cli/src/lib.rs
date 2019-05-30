@@ -51,7 +51,7 @@ pub use structopt::clap::App;
 use params::{
 	RunCmd, PurgeChainCmd, RevertCmd, ImportBlocksCmd, ExportBlocksCmd, BuildSpecCmd,
 	NetworkConfigurationParams, SharedParams, MergeParameters, TransactionPoolParams,
-	NodeKeyParams, NodeKeyType
+	NodeKeyParams, NodeKeyType, Cors,
 };
 pub use params::{NoCustom, CoreParams};
 pub use traits::{GetLogFilter, AugmentClap};
@@ -483,9 +483,9 @@ where
 	config.rpc_ws_max_connections = cli.ws_max_connections;
 	config.rpc_cors = cli.rpc_cors.unwrap_or_else(|| if is_dev {
 		log::warn!("Running in --dev mode, RPC CORS has been disabled.");
-		None
+		Cors::All
 	} else {
-		Some(vec![
+		Cors::List(vec![
 			"http://localhost:*".into(),
 			"http://127.0.0.1:*".into(),
 			"https://localhost:*".into(),
@@ -495,7 +495,7 @@ where
 			"https://cennznet-ui.centrality.me".into(),
 			"https://cennznet-ui.centrality.cloud".into(),
 		])
-	});
+	}).into();
 
 	// Override telemetry
 	if cli.no_telemetry {
