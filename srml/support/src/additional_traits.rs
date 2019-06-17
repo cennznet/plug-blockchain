@@ -39,10 +39,28 @@ impl<T, U> ChargeExtrinsicFee<T, U> for DummyChargeFee<T, U> {
 	}
 }
 
-
 impl<T, U> ChargeFee<T> for DummyChargeFee<T, U> {
 	type Amount = U;
 
 	fn charge_fee(_: &T, _: Self::Amount) -> Result<(), &'static str> { Ok(()) }
 	fn refund_fee(_: &T, _: Self::Amount) -> Result<(), &'static str> { Ok(()) }
+}
+
+/// A type which can verify doughnut domain permissions
+pub trait DoughnutVerifier<Doughnut> {
+	/// The doughnut permission domain for verification
+	const DOMAIN: &'static str;
+	fn verify_doughnut(
+		doughnut: &Doughnut,
+		module: &str,
+		method: &str,
+	) -> Result<(), &'static str>;
+}
+
+impl<Doughnut> DoughnutVerifier<Doughnut> for () {
+	const DOMAIN: &'static str = "";
+	/// A placeholder implementation which should always fail
+	fn verify_doughnut(_: &Doughnut, _: &str, _: &str) ->  Result<(), &'static str> {
+		Err("Doughnut support is not implemented by this permission domain")
+	}
 }

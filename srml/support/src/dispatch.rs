@@ -18,13 +18,15 @@
 //! generating values representing lazy module function calls.
 
 pub use crate::codec::{Codec, Decode, Encode, EncodeAsRef, HasCompact, Input, Output};
-pub use crate::doughnut::Doughnut;
 pub use crate::rstd::prelude::{Clone, Eq, PartialEq, Vec};
 pub use crate::rstd::result;
 pub use srml_metadata::{
 	DecodeDifferent, DecodeDifferentArray, FunctionArgumentMetadata, FunctionMetadata,
 	OuterDispatchCall, OuterDispatchMetadata,
 };
+pub use crate::additional_traits::DoughnutVerifier;
+pub use sr_primitives::doughnut::DoughnutV0 as Doughnut;
+
 #[cfg(feature = "std")]
 pub use std::fmt;
 
@@ -922,16 +924,16 @@ macro_rules! decl_module {
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
-						// Check doughnut grants permission before dispatching the call
-						let doughnut_opt: Option<$crate::dispatch::Doughnut<$trait_instance::AccountId, $trait_instance::Signature>> = $crate::storage::unhashed::get(b":doughnut");
-
-						if let Some(doughnut) = doughnut_opt {
-							if doughnut.certificate.permissions.is_empty() {
-								return Err("Doughnut with empty permissions");
-							}
-							if doughnut.certificate.permissions[0].0.as_slice() != env!("CARGO_PKG_NAME").as_bytes() {
-								return Err("Doughnut does not grant permission for this domain");
-							}
+						use $crate::dispatch::DoughnutVerifier;
+						// Check if a doughnut exists in this execution context and whether it grants permission to
+						// dispatch the call.
+						if let Some(doughnut) = $crate::storage::unhashed::get(b"doughnut") {
+							// TO-DOUGH: Eventually we'll want to pass `$param_name` and `$param`
+							let _ = <T as system::Trait>::DoughnutVerifier::verify_doughnut(
+								&doughnut,
+								env!("CARGO_PKG_NAME"), // module
+								stringify!($fn_name),   // method
+							)?;
 						}
 
 						$( $impl )*
@@ -1224,14 +1226,19 @@ macro_rules! __function_to_metadata {
 mod tests {
 	use super::*;
 	use crate::runtime_primitives::traits::{OnFinalize, OnInitialize};
+	use crate::additional_traits::DoughnutVerifier;
 
-	pub trait Trait {
+	pub trait Trait: system::Trait {
 		type Origin;
 		type BlockNumber: Into<u32>;
 	}
 
 	pub mod system {
-		use super::Result;
+		use super::{DoughnutVerifier as DoughnutVerifierT, Result};
+
+		pub trait Trait {
+			type DoughnutVerifier: DoughnutVerifierT<()>;
+		}
 
 		pub fn ensure_root<R>(_: R) -> Result {
 			Ok(())
@@ -1316,6 +1323,10 @@ mod tests {
 	impl Trait for TraitImpl {
 		type Origin = u32;
 		type BlockNumber = u32;
+	}
+
+	impl system::Trait for TraitImpl {
+		type DoughnutVerifier = ();
 	}
 
 	#[test]

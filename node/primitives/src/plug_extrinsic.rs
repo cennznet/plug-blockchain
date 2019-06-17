@@ -1,15 +1,16 @@
 #[cfg(feature = "std")]
 use std::fmt;
 
+use primitives::sr25519::{Public, Signature};
 use rstd::prelude::*;
 use runtime_io::blake2_256;
 use runtime_primitives::codec::{Compact, Decode, Encode, Input};
 use runtime_primitives::generic::Era;
 use runtime_primitives::traits::{
 	self, BlockNumberToHash, Checkable, CurrentHeight, Doughnuted, Extrinsic, Lookup, MaybeDisplay,
-	Member, SimpleArithmetic,
+	Member, SimpleArithmetic, Verify,
 };
-use support::doughnut::Doughnut;
+use crate::Doughnut;
 
 const TRANSACTION_VERSION: u8 = 0b0000_00001;
 const MASK_VERSION: u8 = 0b0000_1111;
@@ -48,8 +49,10 @@ pub struct PlugExtrinsic<AccountId, Address, Index, Call, Signature> {
 	pub signature: Option<(Address, Signature, Compact<Index>, Era)>,
 	/// The function that should be called.
 	pub function: Call,
-	/// Doughnut attached
-	pub doughnut: Option<Doughnut<AccountId, Signature>>,
+	/// Doughnut attached, if any
+	pub doughnut: Option<Doughnut>,
+	/// phantom to pipe through AccountId
+	pub phantom: rstd::marker::PhantomData<AccountId>,
 }
 
 /// Definition of something that the external world might want to say; its
@@ -63,6 +66,17 @@ pub struct CheckedPlugExtrinsic<AccountId, Index, Call> {
 	pub signed: Option<(AccountId, Index)>,
 	/// The function that should be called.
 	pub function: Call,
+	/// Doughnut attached, if any
+	pub doughnut: Option<Doughnut>,
+}
+
+impl<AccountId: Encode + Clone, Index, Call> Doughnuted
+	for CheckedPlugExtrinsic<AccountId, Index, Call>
+{
+	type Doughnut = Doughnut;
+	fn doughnut(&self) -> Option<&Doughnut> {
+		self.doughnut.as_ref()
+	}
 }
 
 impl<AccountId, Index, Call> traits::Applyable for CheckedPlugExtrinsic<AccountId, Index, Call>
@@ -102,12 +116,13 @@ impl<AccountId, Address, Index, Call, Signature>
 		signed: Address,
 		signature: Signature,
 		era: Era,
-		doughnut: Option<Doughnut<AccountId, Signature>>,
+		doughnut: Option<Doughnut>,
 	) -> Self {
 		PlugExtrinsic {
 			signature: Some((signed, signature, index.into(), era)),
 			function,
 			doughnut,
+			phantom: rstd::marker::PhantomData,
 		}
 	}
 
@@ -117,6 +132,7 @@ impl<AccountId, Address, Index, Call, Signature>
 			signature: None,
 			function,
 			doughnut: None,
+			phantom: rstd::marker::PhantomData,
 		}
 	}
 }
@@ -132,30 +148,21 @@ impl<AccountId: Encode, Address: Encode, Index: Encode, Call: Encode, Signature:
 impl<AccountId: Encode + Clone, Address, Index, Call, Signature: Encode + Clone> Doughnuted
 	for PlugExtrinsic<AccountId, Address, Index, Call, Signature>
 {
-	type Doughnut = Doughnut<AccountId, Signature>;
-	fn doughnut(&self) -> Option<&Doughnut<AccountId, Signature>> {
+	type Doughnut = Doughnut;
+	fn doughnut(&self) -> Option<&Doughnut> {
 		self.doughnut.as_ref()
 	}
 }
 
-//impl<AccountId:Encode+Clone, Index, Call> Doughnuted
-//for CheckedPlugExtrinsic<AccountId, Index, Call>
-//{
-//	type Doughnut= ();
-//	fn doughnut(&self) -> Option<&Self::Doughnut> {
-//		None
-//	}
-//}
-
-impl<AccountId, Address, Index, Call, Signature, Context, Hash, BlockNumber> Checkable<Context>
-	for PlugExtrinsic<AccountId, Address, Index, Call, Signature>
+impl<AccountId, Address, Index, Call, SignatureT, Context, Hash, BlockNumber> Checkable<Context>
+	for PlugExtrinsic<AccountId, Address, Index, Call, SignatureT>
 where
 	Address: Member + MaybeDisplay,
 	Index: Member + MaybeDisplay + SimpleArithmetic,
 	Compact<Index>: Encode,
 	Call: Encode + Member,
-	Signature: Member + traits::Verify<Signer = AccountId> + Encode,
-	AccountId: Member + MaybeDisplay + Encode,
+	SignatureT: Member + traits::Verify<Signer = AccountId> + Encode,
+	AccountId: Member + MaybeDisplay + Encode + Decode,
 	BlockNumber: SimpleArithmetic,
 	Hash: Encode,
 	Context: Lookup<Source = Address, Target = AccountId>
@@ -170,6 +177,7 @@ where
 			return Ok(Self::Checked {
 				signed: None,
 				function: self.function,
+				doughnut: self.doughnut,
 			});
 		};
 
@@ -177,8 +185,7 @@ where
 		let h = context
 			.block_number_to_hash(BlockNumber::sa(era.birth(context.current_height().as_())))
 			.ok_or("transaction birth block ancient")?;
-		let signed = context.lookup(signed)?;
-		let mut new_signed = signed.clone();
+		let mut signed = context.lookup(signed)?;
 
 		let verify_signature = |payload: &[u8]| {
 			if payload.len() > 256 {
@@ -188,16 +195,21 @@ where
 			}
 		};
 
-		let verified: bool;
+		let verified;
 
-		// Doughnuts are signed by their issuer
-		if let Some(d) = self.doughnut {
-			if d.validate() {
+		// Verify the doughnut certificate
+		if let Some(d) = self.doughnut.clone() {
+
+			let sig = Signature::from_h512(d.signature);
+			let encoded = Encode::encode(&d);
+
+			if sig.verify(&encoded[..(encoded.len() - 64)], &Public::from_raw(d.issuer)) {
 				verified = (&index, &self.function, era, h, &d).using_encoded(verify_signature);
-				new_signed = d.certificate.issuer;
+				signed = Decode::decode(&mut &d.issuer[..]).ok_or("invalid issuer account")?;
 			} else {
 				return Err("invalid doughnut");
 			}
+
 		} else {
 			verified = (&index, &self.function, era, h).using_encoded(verify_signature);
 		};
@@ -207,8 +219,9 @@ where
 		}
 
 		return Ok(Self::Checked {
-			signed: Some((new_signed, index.0)),
+			signed: Some((signed, index.0)),
 			function: self.function,
+			doughnut: self.doughnut,
 		});
 	}
 }
@@ -225,8 +238,7 @@ where
 	fn decode<I: Input>(input: &mut I) -> Option<Self> {
 		// This is a little more complicated than usual since the binary format must be compatible
 		// with substrate's generic `Vec<u8>` type. Basically this just means accepting that there
-		// will be a prefix of vector length (we don't need
-		// to use this).
+		// will be a prefix of vector length (we don't need to use this).
 		let _length_do_not_remove_me_see_above: Vec<()> = Decode::decode(input)?;
 
 		let version = input.read_byte()?;
@@ -247,7 +259,7 @@ where
 		let function = Decode::decode(input)?;
 
 		let doughnut = if has_doughnut {
-			Some(Decode::decode(input)?)
+			Some(Doughnut::decode(input)?)
 		} else {
 			None
 		};
@@ -256,6 +268,7 @@ where
 			signature,
 			function,
 			doughnut,
+			phantom: rstd::marker::PhantomData,
 		})
 	}
 }

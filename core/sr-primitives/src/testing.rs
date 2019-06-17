@@ -19,7 +19,7 @@
 use serde::{Serialize, Serializer, Deserialize, de::Error as DeError, Deserializer};
 use std::{fmt::Debug, ops::Deref, fmt};
 use crate::codec::{Codec, Encode, Decode};
-use crate::traits::{self, Checkable, Applyable, BlakeTwo256, Convert};
+use crate::traits::{self, Checkable, Applyable, BlakeTwo256, Convert, Doughnuted};
 use crate::generic::DigestItem as GenDigestItem;
 pub use substrate_primitives::H256;
 use substrate_primitives::U256;
@@ -236,5 +236,15 @@ impl<Call> Applyable for TestXt<Call> where
 	fn call(&self) -> &Self::Call { &self.2 }
 	fn deconstruct(self) -> (Self::Call, Option<Self::AccountId>) {
 		(self.2, self.0)
+	}
+}
+
+impl<Call> Doughnuted for TestXt<Call> where
+	Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
+{	
+	type Doughnut = ();
+
+	fn doughnut(&self) -> Option<&Self::Doughnut> {
+		None
 	}
 }

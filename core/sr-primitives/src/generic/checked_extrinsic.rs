@@ -17,7 +17,7 @@
 //! Generic implementation of an extrinsic that has passed the verification
 //! stage.
 
-use crate::traits::{self, Member, SimpleArithmetic, MaybeDisplay};
+use crate::traits::{self, Member, SimpleArithmetic, MaybeDisplay, Doughnuted};
 
 /// Definition of something that the external world might want to say; its
 /// existence implies that it has been checked and is good, particularly with
@@ -30,6 +30,14 @@ pub struct CheckedExtrinsic<AccountId, Index, Call> {
 	pub signed: Option<(AccountId, Index)>,
 	/// The function that should be called.
 	pub function: Call,
+}
+
+impl<AccountId, Index, Call> Doughnuted for CheckedExtrinsic<AccountId, Index, Call> {
+	type Doughnut = ();
+
+	fn doughnut(&self) -> Option<&Self::Doughnut> {
+		None
+	}
 }
 
 impl<AccountId, Index, Call> traits::Applyable

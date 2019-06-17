@@ -40,6 +40,10 @@ pub mod testing;
 pub mod traits;
 pub mod generic;
 pub mod transaction_validity;
+pub mod doughnut {
+	//! Runtime doughnut types
+	pub use doughnut::v0::parity::DoughnutV0;
+}
 
 /// A message indicating an invalid signature in extrinsic.
 pub const BAD_SIGNATURE: &str = "bad signature in extrinsic";

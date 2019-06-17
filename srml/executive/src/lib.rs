@@ -117,7 +117,7 @@ impl<
 	Block::Extrinsic: Checkable<Context> + Codec + Doughnuted,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
 {
 	fn execute_block(block: Block) {
 		Executive::<System, Block, Context, Payment, AllModules>::execute_block(block);
@@ -131,10 +131,11 @@ impl<
 	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
 	AllModules: OnInitialize<System::BlockNumber> + OnFinalize<System::BlockNumber> + OffchainWorker<System::BlockNumber>,
 > Executive<System, Block, Context, Payment, AllModules> where
-	Block::Extrinsic: Checkable<Context> + Codec + Doughnuted,
-	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
+	Block::Extrinsic: Checkable<Context> + Codec,
+	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
+	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId> + Doughnuted,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
 {
 	/// Start the execution of a particular block.
 	pub fn initialize_block(header: &System::Header) {
@@ -231,9 +232,6 @@ impl<
 	fn apply_extrinsic_with_len(uxt: Block::Extrinsic, encoded_len: usize, to_note: Option<Vec<u8>>) -> result::Result<internal::ApplyOutcome, internal::ApplyError> {
 
 		// Verify that the signature is good.
-		if let Some(d) = uxt.doughnut() {
-			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &d);
-		}
 		let xt = uxt.check(&Default::default()).map_err(internal::ApplyError::BadSignature)?;
 
 		// Check the size of the block if that extrinsic is applied.
@@ -263,10 +261,18 @@ impl<
 			<system::Module<System>>::note_extrinsic(encoded);
 		}
 
+		if let Some(d) = xt.doughnut() {
+			// This extrinsic has a doughnut. Store is to that the doughnut is accessible
+			// by the runtime during execution
+			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &d);
+		} else {
+			// Ensure doughnut state is clear
+			storage::unhashed::kill(well_known_keys::DOUGHNUT_KEY);
+		}
+
 		// Decode parameters and dispatch
 		let (f, s) = xt.deconstruct();
 		let r = f.dispatch(s.into());
-		storage::unhashed::kill(well_known_keys::DOUGHNUT_KEY);
 		<system::Module<System>>::note_applied_extrinsic(&r, encoded_len as u32);
 
 		r.map(|_| internal::ApplyOutcome::Success).or_else(|e| match e {
@@ -370,7 +376,7 @@ mod tests {
 	use primitives::BuildStorage;
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Digest, DigestItem, Header, Block};
-	use srml_support::{traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::ChargeExtrinsicFee, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -400,6 +406,7 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
+		type DoughnutVerifier = ();
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
@@ -412,7 +419,19 @@ mod tests {
 	}
 
 	type TestXt = primitives::testing::TestXt<Call<Runtime>>;
-	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, balances::Module<Runtime>, ()>;
+	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, DummyChargeExtrinsicFee, ()>;
+
+	struct DummyChargeExtrinsicFee;
+	impl ChargeExtrinsicFee<u64, TestXt> for DummyChargeExtrinsicFee {
+		// A dummy impl for test extrinsic and account id types
+		fn charge_extrinsic_fee<'a>(
+			_transactor: &u64,
+			_encoded_len: usize,
+			_extrinsic: &'a TestXt,
+		) -> Result<(), &'static str> {
+			Ok(())
+		}
+	}
 
 	#[test]
 	fn balance_transfer_dispatch_works() {

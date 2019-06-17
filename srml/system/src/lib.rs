@@ -76,11 +76,15 @@ use serde::Serialize;
 use rstd::prelude::*;
 #[cfg(any(feature = "std", test))]
 use rstd::map;
+use primitives::doughnut::DoughnutV0 as Doughnut;
 use primitives::traits::{self, CheckEqual, SimpleArithmetic, SimpleBitOps, One, Bounded, Lookup,
 	Hash, Member, MaybeDisplay, EnsureOrigin, Digest as DigestT, As, CurrentHeight, BlockNumberToHash,
-	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup, Verify};
+	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup};
 use substrate_primitives::storage::well_known_keys;
-use srml_support::{storage, StorageValue, StorageMap, Parameter, decl_module, decl_event, decl_storage};
+use srml_support::{
+	additional_traits::DoughnutVerifier as DoughnutVerifierT, storage, StorageValue, StorageMap,
+	Parameter, decl_module, decl_event, decl_storage,
+};
 use safe_mix::TripletMix;
 use parity_codec::{Encode, Decode};
 
@@ -130,8 +134,6 @@ pub trait Trait: 'static + Eq + Clone {
 	/// The aggregated `Origin` type used by dispatchable calls.
 	type Origin: Into<Option<RawOrigin<Self::AccountId>>> + From<RawOrigin<Self::AccountId>>;
 
-	type Signature: Verify<Signer = Self::AccountId> + Encode + Decode + MaybeSerializeDebug;
-
 	/// Account index (aka nonce) type. This stores the number of previous transactions associated with a sender
 	/// account.
 	type Index:
@@ -176,6 +178,9 @@ pub trait Trait: 'static + Eq + Clone {
 
 	/// A piece of information that can be part of the digest (as a digest item).
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
+
+	/// A type which can verify a doughnut for this runtime permission domain
+	type DoughnutVerifier: DoughnutVerifierT<Doughnut>;
 }
 
 pub type DigestItemOf<T> = <<T as Trait>::Digest as traits::Digest>::Item;
@@ -623,6 +628,7 @@ mod tests {
 		type Header = Header;
 		type Event = u16;
 		type Log = DigestItem;
+		type DoughnutVerifier = ();
 	}
 
 	impl From<Event> for u16 {

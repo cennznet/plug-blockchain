@@ -20,6 +20,7 @@
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
 #![recursion_limit = "256"]
 
+pub use balances::Call as BalancesCall;
 use client::{
 	block_builder::api::{self as block_builder_api, CheckInherentsResult, InherentData},
 	impl_runtime_apis, runtime_api as client_api,
@@ -31,7 +32,7 @@ use council::{motions as council_motions, voting as council_voting};
 use grandpa::fg_primitives::{self, ScheduledChange};
 use node_primitives::{
 	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, Hash, Index,
-	Signature,
+	Signature, plug_extrinsic,
 };
 use rstd::prelude::*;
 use runtime_primitives::traits::{
@@ -52,9 +53,8 @@ pub use timestamp::Call as TimestampCall;
 use version::NativeVersion;
 use version::RuntimeVersion;
 
+mod doughnut;
 mod fee;
-
-mod plug_extrinsic;
 
 /// Runtime version.
 pub const VERSION: RuntimeVersion = RuntimeVersion {
@@ -107,7 +107,7 @@ impl system::Trait for Runtime {
 	type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
 	type Event = Event;
 	type Log = Log;
-	type Signature = Signature;
+	type DoughnutVerifier = Self;
 }
 
 impl aura::Trait for Runtime {
