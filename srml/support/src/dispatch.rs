@@ -927,8 +927,7 @@ macro_rules! decl_module {
 						use $crate::dispatch::DoughnutVerifier;
 						// Check if a doughnut exists in this execution context and whether it grants permission to
 						// dispatch the call.
-						if let Some(doughnut) = $crate::storage::unhashed::get(b"doughnut") {
-							// TO-DOUGH: Eventually we'll want to pass `$param_name` and `$param`
+						if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
 							let _ = <T as system::Trait>::DoughnutVerifier::verify_doughnut(
 								&doughnut,
 								env!("CARGO_PKG_NAME"), // module

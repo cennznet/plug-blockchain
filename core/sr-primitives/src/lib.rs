@@ -487,6 +487,8 @@ pub enum ApplyError {
 	Future = 2,
 	/// Sending account had too low a balance.
 	CantPay = 3,
+	/// Extrinsic signer is not the doughnut holder.
+	SignerHolderMismatch = 60,
 	/// Block is full, no more extrinsics can be applied.
 	FullBlock = 255,
 }

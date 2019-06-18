@@ -66,6 +66,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use rstd::prelude::*;
+use rstd::borrow::Borrow;
 use rstd::marker::PhantomData;
 use rstd::result;
 use primitives::traits::{
@@ -76,6 +77,7 @@ use primitives::traits::{
 use srml_support::{Dispatchable, additional_traits::ChargeExtrinsicFee, storage};
 use parity_codec::{Codec, Encode};
 use system::extrinsics_root;
+use primitives::traits::DoughnutApi;
 use primitives::{ApplyOutcome, ApplyError};
 use primitives::transaction_validity::{TransactionValidity, TransactionPriority, TransactionLongevity};
 use substrate_primitives::storage::well_known_keys;
@@ -89,6 +91,7 @@ mod internal {
 		Future,
 		CantPay,
 		FullBlock,
+		SignerHolderMismatch,
 	}
 
 	pub enum ApplyOutcome {
@@ -134,7 +137,9 @@ impl<
 	Block::Extrinsic: Checkable<Context> + Codec,
 	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId> + Doughnuted,
+	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::AccountId: AsRef<[u8; 32]>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::AccountId: Borrow<[u8; 32]>,
 	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
 {
 	/// Start the execution of a particular block.
@@ -212,6 +217,7 @@ impl<
 			Err(internal::ApplyError::Stale) => Err(ApplyError::Stale),
 			Err(internal::ApplyError::Future) => Err(ApplyError::Future),
 			Err(internal::ApplyError::FullBlock) => Err(ApplyError::FullBlock),
+			Err(internal::ApplyError::SignerHolderMismatch) => Err(ApplyError::SignerHolderMismatch),
 		}
 	}
 
@@ -225,6 +231,7 @@ impl<
 			Err(internal::ApplyError::BadSignature(_)) => panic!("All extrinsics should be properly signed"),
 			Err(internal::ApplyError::Stale) | Err(internal::ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
 			Err(internal::ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
+			Err(internal::ApplyError::SignerHolderMismatch) => panic!("Extrinsic signer should match doughnut holder"),
 		}
 	}
 
@@ -240,7 +247,14 @@ impl<
 		}
 
 		if let (Some(sender), Some(index)) = (xt.sender(), xt.index()) {
-			// check index
+
+			// check extrinsic signer is doughnut holder
+			if let Some(doughnut) = xt.doughnut() {
+				if sender.as_ref() != doughnut.holder().borrow() {
+					return Err(internal::ApplyError::SignerHolderMismatch)
+				}
+			}
+
 			let expected_index = <system::Module<System>>::account_nonce(sender);
 			if index != &expected_index { return Err(
 				if index < &expected_index { internal::ApplyError::Stale } else { internal::ApplyError::Future }
@@ -252,7 +266,7 @@ impl<
 			// AUDIT: Under no circumstances may this function panic from here onwards.
 
 			// increment nonce in storage
-			<system::Module<System>>::inc_account_nonce(sender);
+			<system::Module<System>>::inc_account_nonce(sender)
 		}
 
 		// Make sure to `note_extrinsic` only after we know it's going to be executed
@@ -261,12 +275,12 @@ impl<
 			<system::Module<System>>::note_extrinsic(encoded);
 		}
 
-		if let Some(d) = xt.doughnut() {
-			// This extrinsic has a doughnut. Store is to that the doughnut is accessible
+		if let Some(doughnut) = xt.doughnut() {
+			// This extrinsic has a doughnut. Store it so that the doughnut is accessible
 			// by the runtime during execution
-			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &d);
+			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &doughnut);
 		} else {
-			// Ensure doughnut state is clear
+			// Ensure doughnut state is empty
 			storage::unhashed::kill(well_known_keys::DOUGHNUT_KEY);
 		}
 

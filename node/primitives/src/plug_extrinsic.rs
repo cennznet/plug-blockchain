@@ -8,7 +8,7 @@ use runtime_primitives::codec::{Compact, Decode, Encode, Input};
 use runtime_primitives::generic::Era;
 use runtime_primitives::traits::{
 	self, BlockNumberToHash, Checkable, CurrentHeight, Doughnuted, Extrinsic, Lookup, MaybeDisplay,
-	Member, SimpleArithmetic, Verify,
+	Member, SimpleArithmetic, Verify, DoughnutApi,
 };
 use crate::Doughnut;
 
@@ -149,7 +149,7 @@ impl<AccountId: Encode + Clone, Address, Index, Call, Signature: Encode + Clone>
 	for PlugExtrinsic<AccountId, Address, Index, Call, Signature>
 {
 	type Doughnut = Doughnut;
-	fn doughnut(&self) -> Option<&Doughnut> {
+	fn doughnut(&self) -> Option<&Self::Doughnut> {
 		self.doughnut.as_ref()
 	}
 }
@@ -185,8 +185,7 @@ where
 		let h = context
 			.block_number_to_hash(BlockNumber::sa(era.birth(context.current_height().as_())))
 			.ok_or("transaction birth block ancient")?;
-		let mut signed = context.lookup(signed)?;
-
+		let signed = context.lookup(signed)?;
 		let verify_signature = |payload: &[u8]| {
 			if payload.len() > 256 {
 				signature.verify(&blake2_256(payload)[..], &signed)
@@ -195,23 +194,14 @@ where
 			}
 		};
 
-		let verified;
-
-		// Verify the doughnut certificate
-		if let Some(d) = self.doughnut.clone() {
-
-			let sig = Signature::from_h512(d.signature);
-			let encoded = Encode::encode(&d);
-
-			if sig.verify(&encoded[..(encoded.len() - 64)], &Public::from_raw(d.issuer)) {
-				verified = (&index, &self.function, era, h, &d).using_encoded(verify_signature);
-				signed = Decode::decode(&mut &d.issuer[..]).ok_or("invalid issuer account")?;
-			} else {
-				return Err("invalid doughnut");
+		let verified = if let Some(ref doughnut) = self.doughnut {
+			let doughnut_signature = Signature(doughnut.signature());
+			if !doughnut_signature.verify(doughnut.payload().as_ref(), &Public::from_raw(doughnut.issuer())) {
+				return Err("bad signature in doughnut");
 			}
-
+			(&index, &self.function, era, h, &doughnut).using_encoded(verify_signature)
 		} else {
-			verified = (&index, &self.function, era, h).using_encoded(verify_signature);
+			(&index, &self.function, era, h).using_encoded(verify_signature)
 		};
 
 		if !verified {

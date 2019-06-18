@@ -30,8 +30,7 @@ impl DoughnutVerifier<Doughnut> for Runtime {
 		_module: &str,
 		_method: &str,
 	) -> Result<(), &'static str> {
-		// Doughnut verification should always fail in this runtime
-		Err("Doughnut support is not implemented by this permission domain")
+		Err("Doughnuts are not implemented by this permission domain")
 	}
 }
  

@@ -34,10 +34,7 @@ pub struct CheckedExtrinsic<AccountId, Index, Call> {
 
 impl<AccountId, Index, Call> Doughnuted for CheckedExtrinsic<AccountId, Index, Call> {
 	type Doughnut = ();
-
-	fn doughnut(&self) -> Option<&Self::Doughnut> {
-		None
-	}
+	fn doughnut(&self) -> Option<&Self::Doughnut> { None }
 }
 
 impl<AccountId, Index, Call> traits::Applyable
