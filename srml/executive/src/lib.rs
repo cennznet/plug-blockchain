@@ -420,7 +420,7 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
-		type DoughnutVerifier = ();
+		type DispatchVerifier = ();
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;

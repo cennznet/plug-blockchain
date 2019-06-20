@@ -296,7 +296,7 @@ mod tests {
 				type Header = Header;
 				type Event = ();
 				type Log = DigestItem;
-				type DoughnutVerifier = ();
+				type DispatchVerifier = ();
 			}
 
 			type System = system::Module<Test>;

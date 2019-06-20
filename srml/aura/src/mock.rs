@@ -50,7 +50,7 @@ impl system::Trait for Test {
 	type Header = Header;
 	type Event = ();
 	type Log = DigestItem;
-	type DoughnutVerifier = ();
+	type DispatchVerifier = ();
 }
 
 impl timestamp::Trait for Test {

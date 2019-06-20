@@ -15,22 +15,20 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 //!
-//! The DoughnutVerifier impl for this runtime permission domain
+//! The DispatchVerifier impl for this runtime permission domain
 //!
 use crate::Runtime;
 use node_primitives::Doughnut;
-use support::additional_traits::DoughnutVerifier;
+use support::additional_traits::DispatchVerifier;
 
-impl DoughnutVerifier<Doughnut> for Runtime {
-    /// The current permission domain
-    const DOMAIN: &'static str = "plug";
+impl DispatchVerifier<Doughnut> for Runtime {
+	const DOMAIN: &'static str = "plug";
 
-	fn verify_doughnut(
+	fn verify(
 		_doughnut: &Doughnut,
 		_module: &str,
 		_method: &str,
 	) -> Result<(), &'static str> {
-		Err("Doughnuts are not implemented by this permission domain")
+		Err("Doughnut dispatch verification is not implemented for this domain")
 	}
 }
- 

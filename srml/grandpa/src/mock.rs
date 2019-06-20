@@ -56,7 +56,7 @@ impl system::Trait for Test {
 	type Header = Header;
 	type Event = TestEvent;
 	type Log = DigestItem;
-	type DoughnutVerifier = ();
+	type DispatchVerifier = ();
 }
 
 mod grandpa {

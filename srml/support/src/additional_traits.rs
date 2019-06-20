@@ -46,21 +46,22 @@ impl<T, U> ChargeFee<T> for DummyChargeFee<T, U> {
 	fn refund_fee(_: &T, _: Self::Amount) -> Result<(), &'static str> { Ok(()) }
 }
 
-/// A type which can verify doughnut domain permissions
-pub trait DoughnutVerifier<Doughnut> {
-	/// The doughnut permission domain for verification
+/// A type which can verify dispatch permissions for a specific domain
+pub trait DispatchVerifier<Doughnut> {
+	/// The doughnut permission domain it can verify
 	const DOMAIN: &'static str;
-	fn verify_doughnut(
+	/// Check the given doughnut authorizes a dispatched call to `module` and `method` for this domain
+	fn verify(
 		doughnut: &Doughnut,
 		module: &str,
 		method: &str,
 	) -> Result<(), &'static str>;
 }
 
-impl<Doughnut> DoughnutVerifier<Doughnut> for () {
+/// A dummy implementation which should just fail
+impl<Doughnut> DispatchVerifier<Doughnut> for () {
 	const DOMAIN: &'static str = "";
-	/// A placeholder implementation which should always fail
-	fn verify_doughnut(_: &Doughnut, _: &str, _: &str) ->  Result<(), &'static str> {
-		Err("Doughnut support is not implemented by this permission domain")
+	fn verify(_: &Doughnut, _: &str, _: &str) ->  Result<(), &'static str> {
+		Err("Doughnut dispatch verification is not implemented for this domain")
 	}
 }

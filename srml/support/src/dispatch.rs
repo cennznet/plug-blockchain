@@ -24,7 +24,7 @@ pub use srml_metadata::{
 	DecodeDifferent, DecodeDifferentArray, FunctionArgumentMetadata, FunctionMetadata,
 	OuterDispatchCall, OuterDispatchMetadata,
 };
-pub use crate::additional_traits::DoughnutVerifier;
+pub use crate::additional_traits::DispatchVerifier;
 pub use sr_primitives::doughnut::DoughnutV0 as Doughnut;
 
 #[cfg(feature = "std")]
@@ -924,11 +924,11 @@ macro_rules! decl_module {
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
-						use $crate::dispatch::DoughnutVerifier;
+						use $crate::dispatch::DispatchVerifier;
 						// Check if a doughnut exists in this execution context and whether it grants permission to
 						// dispatch the call.
 						if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
-							let _ = <T as system::Trait>::DoughnutVerifier::verify_doughnut(
+							let _ = <T as system::Trait>::DispatchVerifier::verify(
 								&doughnut,
 								env!("CARGO_PKG_NAME"), // module
 								stringify!($fn_name),   // method
@@ -1225,7 +1225,7 @@ macro_rules! __function_to_metadata {
 mod tests {
 	use super::*;
 	use crate::runtime_primitives::traits::{OnFinalize, OnInitialize};
-	use crate::additional_traits::DoughnutVerifier;
+	use crate::additional_traits::DispatchVerifier;
 
 	pub trait Trait: system::Trait {
 		type Origin;
@@ -1233,10 +1233,10 @@ mod tests {
 	}
 
 	pub mod system {
-		use super::{DoughnutVerifier as DoughnutVerifierT, Result};
+		use super::{DispatchVerifier as DispatchVerifierT, Result};
 
 		pub trait Trait {
-			type DoughnutVerifier: DoughnutVerifierT<()>;
+			type DispatchVerifier: DispatchVerifierT<()>;
 		}
 
 		pub fn ensure_root<R>(_: R) -> Result {
@@ -1325,7 +1325,7 @@ mod tests {
 	}
 
 	impl system::Trait for TraitImpl {
-		type DoughnutVerifier = ();
+		type DispatchVerifier = ();
 	}
 
 	#[test]

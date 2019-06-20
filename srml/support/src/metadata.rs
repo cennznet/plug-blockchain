@@ -244,13 +244,13 @@ mod tests {
 	use crate::codec::{Encode, Decode};
 
 	mod system {
-		use crate::dispatch::DoughnutVerifier as DoughnutVerifierT;
+		use crate::dispatch::DispatchVerifier as DispatchVerifierT;
 
 		pub trait Trait {
 			type Origin: Into<Option<RawOrigin<Self::AccountId>>> + From<RawOrigin<Self::AccountId>>;
 			type AccountId;
 			type BlockNumber;
-			type DoughnutVerifier: DoughnutVerifierT<()>;
+			type DispatchVerifier: DispatchVerifierT<()>;
 		}
 
 		decl_module! {
@@ -369,7 +369,7 @@ mod tests {
 		type Origin = Origin;
 		type AccountId = u32;
 		type BlockNumber = u32;
-		type DoughnutVerifier = ();
+		type DispatchVerifier = ();
 	}
 
 	impl_runtime_metadata!(

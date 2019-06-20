@@ -132,7 +132,7 @@ impl system::Trait for Runtime {
 	/// The ubiquitous origin type.
 	type Origin = Origin;
 	/// A NO-OP doughnut verifier
-	type DoughnutVerifier = ();
+	type DispatchVerifier = ();
 }
 
 impl aura::Trait for Runtime {

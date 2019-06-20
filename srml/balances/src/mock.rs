@@ -44,7 +44,7 @@ impl system::Trait for Runtime {
 	type Header = Header;
 	type Event = ();
 	type Log = DigestItem;
-	type DoughnutVerifier = ();
+	type DispatchVerifier = ();
 }
 impl Trait for Runtime {
 	type Balance = u64;

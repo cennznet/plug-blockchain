@@ -82,7 +82,7 @@ use primitives::traits::{self, CheckEqual, SimpleArithmetic, SimpleBitOps, One, 
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup};
 use substrate_primitives::storage::well_known_keys;
 use srml_support::{
-	additional_traits::DoughnutVerifier as DoughnutVerifierT, storage, StorageValue, StorageMap,
+	additional_traits::DispatchVerifier as DispatchVerifierT, storage, StorageValue, StorageMap,
 	Parameter, decl_module, decl_event, decl_storage,
 };
 use safe_mix::TripletMix;
@@ -180,7 +180,7 @@ pub trait Trait: 'static + Eq + Clone {
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
 
 	/// A type which can verify a doughnut for this runtime permission domain
-	type DoughnutVerifier: DoughnutVerifierT<Doughnut>;
+	type DispatchVerifier: DispatchVerifierT<Doughnut>;
 }
 
 pub type DigestItemOf<T> = <<T as Trait>::Digest as traits::Digest>::Item;
@@ -628,7 +628,7 @@ mod tests {
 		type Header = Header;
 		type Event = u16;
 		type Log = DigestItem;
-		type DoughnutVerifier = ();
+		type DispatchVerifier = ();
 	}
 
 	impl From<Event> for u16 {
