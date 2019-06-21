@@ -267,7 +267,7 @@ pub type CheckedExtrinsic = plug_extrinsic::CheckedPlugExtrinsic<AccountId, Inde
 pub type ExtrinsicFeePayment =
 	fee::ExtrinsicFeeCharger<Block, system::ChainContext<Runtime>, Runtime>;
 /// Executive: handles dispatch to the various modules.
-pub type Executive = executive::Executive<
+pub type Executive = executive::DoughnutExecutive<
 	Runtime,
 	Block,
 	system::ChainContext<Runtime>,

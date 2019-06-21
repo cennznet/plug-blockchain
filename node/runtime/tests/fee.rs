@@ -37,7 +37,6 @@ fn charge_extrinsic_fee_works() {
 			let xt = MockCheckedExtrinsic {
 				signed: None,
 				function: Call::Timestamp(timestamp::Call::<Runtime>::set(0)), // An arbitrarily chosen Runtime call
-				doughnut: None,
 			};
 
 			System::set_extrinsic_index(0);
@@ -76,7 +75,6 @@ fn charge_extrinsic_fee_for_generic_asset_transfer() {
 			let xt = MockCheckedExtrinsic {
 				signed: None,
 				function: Call::GenericAsset(generic_asset::Call::<Runtime>::transfer(0, DEFAULT_TRANSACTOR, 10)),
-				doughnut: None,
 			};
 
 			System::set_extrinsic_index(0);
@@ -102,7 +100,6 @@ fn charge_extrinsic_fee_for_generic_asset_transfer_overflow() {
 			let xt = MockCheckedExtrinsic {
 				signed: None,
 				function: Call::GenericAsset(generic_asset::Call::<Runtime>::transfer(0, DEFAULT_TRANSACTOR, 10)),
-				doughnut: None,
 			};
 
 			System::set_extrinsic_index(0);
@@ -115,7 +112,6 @@ fn charge_extrinsic_fee_fails_with_bytes_fee_overflow() {
 	let xt = MockCheckedExtrinsic {
 		signed: None,
 		function: Call::Timestamp(timestamp::Call::<Runtime>::set(0)),
-		doughnut: None,
 	};
 
 	// bytes fee overflows.
@@ -136,7 +132,6 @@ fn charge_extrinsic_fee_fails_with_total_fee_overflow() {
 	let xt = MockCheckedExtrinsic {
 		signed: None,
 		function: Call::Timestamp(timestamp::Call::<Runtime>::set(0)),
-		doughnut: None,
 	};
 
 	// bytes fee doesn't overflow, but total fee (bytes_fee + BASE_FEE) does

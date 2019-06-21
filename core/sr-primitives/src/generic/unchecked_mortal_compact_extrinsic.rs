@@ -22,7 +22,7 @@ use std::fmt;
 use rstd::prelude::*;
 use runtime_io::blake2_256;
 use crate::codec::{Decode, Encode, Input, Compact};
-use crate::traits::{self, Doughnuted, Member, SimpleArithmetic, MaybeDisplay, CurrentHeight, BlockNumberToHash, Lookup,
+use crate::traits::{self, Member, SimpleArithmetic, MaybeDisplay, CurrentHeight, BlockNumberToHash, Lookup,
 	Checkable, Extrinsic};
 use super::{CheckedExtrinsic, Era};
 
@@ -55,15 +55,6 @@ impl<Address, Index, Call, Signature> UncheckedMortalCompactExtrinsic<Address, I
 			signature: None,
 			function,
 		}
-	}
-}
-
-impl<Address, Index, Call, Signature> Doughnuted
-	for UncheckedMortalCompactExtrinsic<Address, Index, Call, Signature>
-{
-	type Doughnut = ();
-	fn doughnut(&self) -> Option<&Self::Doughnut> {
-		None
 	}
 }
 

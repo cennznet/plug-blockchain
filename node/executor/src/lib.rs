@@ -92,15 +92,11 @@ mod tests {
 				UncheckedExtrinsic {
 					signature: Some((indices::address::Address::Id(signed), signature, payload.0, era)),
 					function: payload.1,
-					doughnut: None,
-					phantom: std::marker::PhantomData,
 				}
 			}
 			None => UncheckedExtrinsic {
 				signature: None,
 				function: xt.function,
-				doughnut: None,
-				phantom: std::marker::PhantomData,
 			},
 		}
 	}
@@ -109,7 +105,6 @@ mod tests {
 		sign(CheckedExtrinsic {
 			signed: Some((alice(), 0)),
 			function: Call::Balances(balances::Call::transfer::<Runtime>(bob().into(), 69)),
-			doughnut: None,
 		})
 	}
 
@@ -400,12 +395,10 @@ mod tests {
 				CheckedExtrinsic {
 					signed: None,
 					function: Call::Timestamp(timestamp::Call::set(42)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((alice(), 0)),
 					function: Call::Balances(balances::Call::transfer(bob().into(), 69)),
-					doughnut: None,
 				},
 			]
 		)
@@ -424,12 +417,10 @@ mod tests {
 				CheckedExtrinsic {
 					signed: None,
 					function: Call::Timestamp(timestamp::Call::set(42)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((alice(), 0)),
 					function: Call::Balances(balances::Call::transfer(bob().into(), 69)),
-					doughnut: None,
 				},
 			]
 		);
@@ -441,17 +432,14 @@ mod tests {
 				CheckedExtrinsic {
 					signed: None,
 					function: Call::Timestamp(timestamp::Call::set(52)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((bob(), 0)),
 					function: Call::Balances(balances::Call::transfer(alice().into(), 5)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((alice(), 1)),
 					function: Call::Balances(balances::Call::transfer(bob().into(), 15)),
-					doughnut: None,
 				}
 			]
 		);
@@ -471,12 +459,10 @@ mod tests {
 				CheckedExtrinsic {
 					signed: None,
 					function: Call::Timestamp(timestamp::Call::set(42)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((alice(), 0)),
 					function: Call::Consensus(consensus::Call::remark(vec![0; 120000])),
-					doughnut: None,
 				}
 			]
 		)
@@ -733,28 +719,24 @@ mod tests {
 				CheckedExtrinsic {
 					signed: None,
 					function: Call::Timestamp(timestamp::Call::set(42)),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((charlie(), 0)),
 					function: Call::Contract(
 						contract::Call::put_code::<Runtime>(10_000, transfer_code)
 					),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((charlie(), 1)),
 					function: Call::Contract(
 						contract::Call::create::<Runtime>(10, 10_000, transfer_ch, Vec::new())
 					),
-					doughnut: None,
 				},
 				CheckedExtrinsic {
 					signed: Some((charlie(), 2)),
 					function: Call::Contract(
 						contract::Call::call::<Runtime>(indices::address::Address::Id(addr.clone()), 10, 10_000, vec![0x00, 0x01, 0x02, 0x03])
 					),
-					doughnut: None,
 				},
 			]
 		);

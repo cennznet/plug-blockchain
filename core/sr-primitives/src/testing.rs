@@ -19,7 +19,7 @@
 use serde::{Serialize, Serializer, Deserialize, de::Error as DeError, Deserializer};
 use std::{fmt::Debug, ops::Deref, fmt};
 use crate::codec::{Codec, Encode, Decode};
-use crate::traits::{self, Checkable, Applyable, BlakeTwo256, Convert, Doughnuted};
+use crate::traits::{self, Checkable, Applyable, BlakeTwo256, Convert};
 use crate::generic::DigestItem as GenDigestItem;
 pub use substrate_primitives::H256;
 use substrate_primitives::U256;
@@ -239,12 +239,132 @@ impl<Call> Applyable for TestXt<Call> where
 	}
 }
 
-impl<Call> Doughnuted for TestXt<Call> where
-	Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
-{	
-	type Doughnut = ();
+pub mod doughnut {
+	//!
+	//! Doughnut aware types for extrinsic tests
+	//!
 
-	fn doughnut(&self) -> Option<&Self::Doughnut> {
-		None
+	/// A test account ID. Stores a `u64` as a byte array
+	#[derive(PartialEq, Eq, Clone, Debug, Decode, Encode, PartialOrd, Serialize, Deserialize, Default, Ord)]
+	pub struct TestAccountId(pub [u8; 8]);
+
+	impl TestAccountId {
+		/// Create a new TestAccountId
+		pub	fn new(id: u64) -> Self {
+			TestAccountId(id.to_le_bytes())
+		}
+	}
+
+	impl AsRef<[u8]> for TestAccountId {
+		fn as_ref(&self) -> &[u8] {
+			&self.0[..]
+		}
+	}
+
+	impl fmt::Display for TestAccountId {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			write!(f, "TestAccountId({:?})", self.0)
+		}
+	}
+
+	/// Test transaction
+	#[derive(PartialEq, Eq, Clone, Encode, Decode)]
+	pub struct TestXt<Call, Doughnut>{
+		/// The extrinsic signer, if any
+		pub sender: Option<TestAccountId>,
+		/// The nonce/index
+		pub index: u64,
+		/// Target runtime call
+		pub function: Call,
+		/// An attached doughnut, if any
+		pub doughnut: Option<Doughnut>,
+	}
+
+	impl<Call, Doughnut> TestXt<Call, Doughnut> {
+		/// Create a new TestXt with Doughnut attached
+		pub fn new(sender: u64, index: u64, function: Call, doughnut: Option<Doughnut>) -> Self {
+			TestXt {
+				sender: Some(TestAccountId::new(sender)),
+				index,
+				function,
+				doughnut: doughnut,
+			}
+		}
+	}
+
+	impl<Call, Doughnut> Serialize for TestXt<Call, Doughnut>
+		where
+			TestXt<Call, Doughnut>: Encode,
+	{
+		fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error> where S: Serializer {
+			self.using_encoded(|bytes| seq.serialize_bytes(bytes))
+		}
+	}
+
+	impl<Call, Doughnut: Debug> Debug for TestXt<Call, Doughnut> {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			// TODO: Add function
+			write!(f, "TestXt({:?}, {:?}, {:?})", self.sender, self.index, self.doughnut)
+		}
+	}
+
+	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>
+		where
+			Call: Codec + Sync + Send,
+			Doughnut: Codec + Sync + Send,
+	{
+		type Checked = Self;
+		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
+	}
+	impl<Call, Doughnut> traits::Extrinsic for TestXt<Call, Doughnut>
+		where
+			Call: Codec + Sync + Send,
+			Doughnut: Codec + Sync + Send,
+	{
+		fn is_signed(&self) -> Option<bool> {
+			None
+		}
+	}
+
+	impl<Call, Doughnut> Applyable for TestXt<Call, Doughnut> where
+		Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
+		Doughnut: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
+	{
+		type AccountId = TestAccountId;
+		type Index = u64;
+		type Call = Call;
+		fn sender(&self) -> Option<&TestAccountId> { self.sender.as_ref() }
+		fn index(&self) -> Option<&u64> { Some(&self.index) }
+		fn call(&self) -> &Self::Call { &self.function }
+		fn deconstruct(self) -> (Self::Call, Option<Self::AccountId>) {
+			(self.function, self.sender)
+		}
+	}
+
+	impl<Call, Doughnut> Doughnuted for TestXt<Call, Doughnut> where
+		Doughnut: Clone + Decode + Encode + DoughnutApi,
+	{	
+		type Doughnut = Doughnut;
+		fn doughnut(&self) -> Option<&Self::Doughnut> {
+			self.doughnut.as_ref()
+		}
+	}
+
+	/// A test doughnut
+	#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
+	pub struct DummyDoughnut {
+		issuer: TestAccountId,
+		holder: TestAccountId,
+	}
+
+	impl DoughnutApi for DummyDoughnut {
+		type AccountId = TestAccountId;
+		type Signature = ();
+		type Timestamp = ();
+		fn holder(&self) -> Self::AccountId { self.holder.clone() }
+		fn issuer(&self) -> Self::AccountId { self.issuer.clone() }
+		fn expiry(&self) -> Self::Timestamp { () }
+		fn payload(&self) -> Vec<u8> { Default::default() }
+		fn signature(&self) -> Self::Signature { () }
 	}
 }

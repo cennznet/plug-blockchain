@@ -66,21 +66,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use rstd::prelude::*;
-use rstd::borrow::Borrow;
 use rstd::marker::PhantomData;
 use rstd::result;
 use primitives::traits::{
 	self, Header, Zero, One, Checkable, Applyable, CheckEqual, OnFinalize,
 	OnInitialize, Digest, NumberFor, Block as BlockT, OffchainWorker,
-	Doughnuted,
 };
-use srml_support::{Dispatchable, additional_traits::ChargeExtrinsicFee, storage};
+use srml_support::{Dispatchable, additional_traits::ChargeExtrinsicFee};
 use parity_codec::{Codec, Encode};
 use system::extrinsics_root;
-use primitives::traits::DoughnutApi;
 use primitives::{ApplyOutcome, ApplyError};
 use primitives::transaction_validity::{TransactionValidity, TransactionPriority, TransactionLongevity};
-use substrate_primitives::storage::well_known_keys;
+
+mod doughnut;
+pub use doughnut::DoughnutExecutive;
 
 mod internal {
 	pub const MAX_TRANSACTIONS_SIZE: u32 = 4 * 1024 * 1024;
@@ -91,7 +90,6 @@ mod internal {
 		Future,
 		CantPay,
 		FullBlock,
-		SignerHolderMismatch,
 	}
 
 	pub enum ApplyOutcome {
@@ -117,10 +115,10 @@ impl<
 	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
 	AllModules: OnInitialize<System::BlockNumber> + OnFinalize<System::BlockNumber> + OffchainWorker<System::BlockNumber>,
 > ExecuteBlock<Block> for Executive<System, Block, Context, Payment, AllModules> where
-	Block::Extrinsic: Checkable<Context> + Codec + Doughnuted,
+	Block::Extrinsic: Checkable<Context> + Codec,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
 {
 	fn execute_block(block: Block) {
 		Executive::<System, Block, Context, Payment, AllModules>::execute_block(block);
@@ -135,12 +133,9 @@ impl<
 	AllModules: OnInitialize<System::BlockNumber> + OnFinalize<System::BlockNumber> + OffchainWorker<System::BlockNumber>,
 > Executive<System, Block, Context, Payment, AllModules> where
 	Block::Extrinsic: Checkable<Context> + Codec,
-	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
-	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId> + Doughnuted,
-	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::AccountId: AsRef<[u8; 32]>,
+	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::AccountId: Borrow<[u8; 32]>,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
 {
 	/// Start the execution of a particular block.
 	pub fn initialize_block(header: &System::Header) {
@@ -217,7 +212,6 @@ impl<
 			Err(internal::ApplyError::Stale) => Err(ApplyError::Stale),
 			Err(internal::ApplyError::Future) => Err(ApplyError::Future),
 			Err(internal::ApplyError::FullBlock) => Err(ApplyError::FullBlock),
-			Err(internal::ApplyError::SignerHolderMismatch) => Err(ApplyError::SignerHolderMismatch),
 		}
 	}
 
@@ -231,7 +225,6 @@ impl<
 			Err(internal::ApplyError::BadSignature(_)) => panic!("All extrinsics should be properly signed"),
 			Err(internal::ApplyError::Stale) | Err(internal::ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
 			Err(internal::ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
-			Err(internal::ApplyError::SignerHolderMismatch) => panic!("Extrinsic signer should match doughnut holder"),
 		}
 	}
 
@@ -247,14 +240,7 @@ impl<
 		}
 
 		if let (Some(sender), Some(index)) = (xt.sender(), xt.index()) {
-
-			// check extrinsic signer is doughnut holder
-			if let Some(doughnut) = xt.doughnut() {
-				if sender.as_ref() != doughnut.holder().borrow() {
-					return Err(internal::ApplyError::SignerHolderMismatch)
-				}
-			}
-
+			// check index
 			let expected_index = <system::Module<System>>::account_nonce(sender);
 			if index != &expected_index { return Err(
 				if index < &expected_index { internal::ApplyError::Stale } else { internal::ApplyError::Future }
@@ -266,22 +252,13 @@ impl<
 			// AUDIT: Under no circumstances may this function panic from here onwards.
 
 			// increment nonce in storage
-			<system::Module<System>>::inc_account_nonce(sender)
+			<system::Module<System>>::inc_account_nonce(sender);
 		}
 
 		// Make sure to `note_extrinsic` only after we know it's going to be executed
 		// to prevent it from leaking in storage.
 		if let Some(encoded) = to_note {
 			<system::Module<System>>::note_extrinsic(encoded);
-		}
-
-		if let Some(doughnut) = xt.doughnut() {
-			// This extrinsic has a doughnut. Store it so that the doughnut is accessible
-			// by the runtime during execution
-			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &doughnut);
-		} else {
-			// Ensure doughnut state is empty
-			storage::unhashed::kill(well_known_keys::DOUGHNUT_KEY);
 		}
 
 		// Decode parameters and dispatch
@@ -390,7 +367,7 @@ mod tests {
 	use primitives::BuildStorage;
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Digest, DigestItem, Header, Block};
-	use srml_support::{additional_traits::ChargeExtrinsicFee, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -420,7 +397,6 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
-		type DispatchVerifier = ();
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
@@ -433,19 +409,7 @@ mod tests {
 	}
 
 	type TestXt = primitives::testing::TestXt<Call<Runtime>>;
-	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, DummyChargeExtrinsicFee, ()>;
-
-	struct DummyChargeExtrinsicFee;
-	impl ChargeExtrinsicFee<u64, TestXt> for DummyChargeExtrinsicFee {
-		// A dummy impl for test extrinsic and account id types
-		fn charge_extrinsic_fee<'a>(
-			_transactor: &u64,
-			_encoded_len: usize,
-			_extrinsic: &'a TestXt,
-		) -> Result<(), &'static str> {
-			Ok(())
-		}
-	}
+	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, balances::Module<Runtime>, ()>;
 
 	#[test]
 	fn balance_transfer_dispatch_works() {

@@ -179,7 +179,7 @@ pub trait Trait: 'static + Eq + Clone {
 	/// A piece of information that can be part of the digest (as a digest item).
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
 
-	/// A type which can verify a doughnut for this runtime permission domain
+	/// A type which can verify a doughnut in order to dispatch a runtime call
 	type DispatchVerifier: DispatchVerifierT<Doughnut>;
 }
 
