@@ -19,13 +19,17 @@
 #![cfg(test)]
 
 use primitives::{BuildStorage, traits::IdentityLookup, testing::{Digest, DigestItem, Header, UintAuthorityId}};
-use srml_support::impl_outer_origin;
+use srml_support::{impl_outer_origin, impl_outer_error};
 use runtime_io;
 use substrate_primitives::{H256, Blake2Hasher};
 use crate::{Trait, Module};
 
 impl_outer_origin!{
 	pub enum Origin for Test {}
+}
+
+impl_outer_error! {
+	pub enum Error for Runtime {}
 }
 
 // Workaround for https://github.com/rust-lang/rust/issues/26925 . Remove when sorted.
@@ -52,6 +56,7 @@ impl system::Trait for Test {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 
 impl timestamp::Trait for Test {

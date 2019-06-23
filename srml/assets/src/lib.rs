@@ -225,7 +225,7 @@ mod tests {
 	use super::*;
 
 	use runtime_io::with_externalities;
-	use srml_support::{impl_outer_origin, assert_ok, assert_noop};
+	use srml_support::{impl_outer_origin, impl_outer_error, assert_ok, assert_noop};
 	use substrate_primitives::{H256, Blake2Hasher};
 	// The testing primitives are very useful for avoiding having to work with signatures
 	// or public keys. `u64` is used as the `AccountId` and no `Signature`s are required.
@@ -237,6 +237,10 @@ mod tests {
 
 	impl_outer_origin! {
 		pub enum Origin for Test {}
+	}
+
+	impl_outer_error! {
+		pub enum Error for Test {}
 	}
 
 	// For testing the module, we construct most of a mock runtime. This means
@@ -258,6 +262,7 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = ();
 		type DispatchVerifier = ();
+		type Error = Error;
 	}
 	impl Trait for Test {
 		type Event = ();

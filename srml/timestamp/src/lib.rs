@@ -328,7 +328,7 @@ impl<T: Trait> ProvideInherent for Module<T> {
 mod tests {
 	use super::*;
 
-	use srml_support::{impl_outer_origin, assert_ok};
+	use srml_support::{impl_outer_origin, impl_outer_error, assert_ok};
 	use runtime_io::{with_externalities, TestExternalities};
 	use substrate_primitives::H256;
 	use runtime_primitives::BuildStorage;
@@ -337,6 +337,10 @@ mod tests {
 
 	impl_outer_origin! {
 		pub enum Origin for Test {}
+	}
+
+	impl_outer_error! {
+		pub enum Error for Runtime {}
 	}
 
 	#[derive(Clone, Eq, PartialEq)]
@@ -355,6 +359,7 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = ();
 		type DispatchVerifier = ();
+		type Error = Error;
 	}
 	impl Trait for Test {
 		type Moment = u64;

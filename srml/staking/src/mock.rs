@@ -23,7 +23,7 @@ use primitives::{traits::{IdentityLookup, Convert}, BuildStorage, Perbill};
 use primitives::testing::{Digest, DigestItem, Header, UintAuthorityId, ConvertUintAuthorityId};
 use substrate_primitives::{H256, Blake2Hasher};
 use runtime_io;
-use srml_support::impl_outer_origin;
+use srml_support::{impl_outer_origin, impl_outer_error};
 use crate::{GenesisConfig, Module, Trait, StakerStatus};
 
 /// The AccountId alias in this test module.
@@ -42,6 +42,12 @@ impl Convert<u128, u64> for CurrencyToVoteHandler {
 
 impl_outer_origin!{
 	pub enum Origin for Test {}
+}
+
+impl_outer_error! {
+	pub enum Error for Test {
+		balances
+	}
 }
 
 // Workaround for https://github.com/rust-lang/rust/issues/26925 . Remove when sorted.
@@ -66,6 +72,7 @@ impl system::Trait for Test {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 impl balances::Trait for Test {
 	type Balance = u64;
@@ -75,6 +82,7 @@ impl balances::Trait for Test {
 	type TransactionPayment = ();
 	type TransferPayment = ();
 	type DustRemoval = ();
+	type Error = Error;
 }
 impl session::Trait for Test {
 	type ConvertAccountIdToSessionKey = ConvertUintAuthorityId;

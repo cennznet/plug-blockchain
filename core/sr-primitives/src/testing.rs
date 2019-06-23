@@ -21,6 +21,7 @@ use std::{fmt::Debug, ops::Deref, fmt};
 use crate::codec::{Codec, Encode, Decode};
 use crate::traits::{self, Checkable, Applyable, BlakeTwo256, Convert};
 use crate::generic::DigestItem as GenDigestItem;
+use crate::Error;
 pub use substrate_primitives::H256;
 use substrate_primitives::U256;
 use substrate_primitives::sr25519::{Public as AuthorityId, Signature as AuthoritySignature};
@@ -218,7 +219,8 @@ impl<Call> Debug for TestXt<Call> {
 
 impl<Call: Codec + Sync + Send, Context> Checkable<Context> for TestXt<Call> {
 	type Checked = Self;
-	fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
+	type Error = Error;
+	fn check(self, _: &Context) -> Result<Self::Checked, Self::Error> { Ok(self) }
 }
 impl<Call: Codec + Sync + Send> traits::Extrinsic for TestXt<Call> {
 	fn is_signed(&self) -> Option<bool> {
@@ -312,6 +314,7 @@ pub mod doughnut {
 
 	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>{
 		type Checked = Self;
+		type Error = &'static str;
 		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
 	}
 
@@ -336,7 +339,7 @@ pub mod doughnut {
 
 	impl<Call, Doughnut> Doughnuted for TestXt<Call, Doughnut> where
 		Doughnut: Clone + Decode + Encode + DoughnutApi,
-	{	
+	{
 		type Doughnut = Doughnut;
 		fn doughnut(&self) -> Option<&Self::Doughnut> {
 			self.doughnut.as_ref()

@@ -75,7 +75,7 @@ use primitives::traits::{
 use srml_support::{Dispatchable, additional_traits::ChargeExtrinsicFee};
 use parity_codec::{Codec, Encode};
 use system::extrinsics_root;
-use primitives::{ApplyOutcome, ApplyError};
+use primitives::{ApplyOutcome, ApplyError, DispatchError};
 use primitives::transaction_validity::{TransactionValidity, TransactionPriority, TransactionLongevity};
 
 mod doughnut;
@@ -83,19 +83,6 @@ pub use doughnut::DoughnutExecutive;
 
 mod internal {
 	pub const MAX_TRANSACTIONS_SIZE: u32 = 4 * 1024 * 1024;
-
-	pub enum ApplyError {
-		BadSignature(&'static str),
-		Stale,
-		Future,
-		CantPay,
-		FullBlock,
-	}
-
-	pub enum ApplyOutcome {
-		Success,
-		Fail(&'static str),
-	}
 }
 
 /// Trait that can be used to execute a block.
@@ -118,7 +105,8 @@ impl<
 	Block::Extrinsic: Checkable<Context> + Codec,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Error: Into<DispatchError> + TryInto<system::Error>,
 {
 	fn execute_block(block: Block) {
 		Executive::<System, Block, Context, Payment, AllModules>::execute_block(block);
@@ -135,7 +123,8 @@ impl<
 	Block::Extrinsic: Checkable<Context> + Codec,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId>,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Error: Into<DispatchError> + TryInto<system::Error>,
 {
 	/// Start the execution of a particular block.
 	pub fn initialize_block(header: &System::Header) {
@@ -201,53 +190,52 @@ impl<
 	/// Apply extrinsic outside of the block execution function.
 	/// This doesn't attempt to validate anything regarding the block, but it builds a list of uxt
 	/// hashes.
-	pub fn apply_extrinsic(uxt: Block::Extrinsic) -> result::Result<ApplyOutcome, ApplyError> {
+	pub fn apply_extrinsic(uxt: Block::Extrinsic) -> ApplyResult {
 		let encoded = uxt.encode();
 		let encoded_len = encoded.len();
-		match Self::apply_extrinsic_with_len(uxt, encoded_len, Some(encoded)) {
-			Ok(internal::ApplyOutcome::Success) => Ok(ApplyOutcome::Success),
-			Ok(internal::ApplyOutcome::Fail(_)) => Ok(ApplyOutcome::Fail),
-			Err(internal::ApplyError::CantPay) => Err(ApplyError::CantPay),
-			Err(internal::ApplyError::BadSignature(_)) => Err(ApplyError::BadSignature),
-			Err(internal::ApplyError::Stale) => Err(ApplyError::Stale),
-			Err(internal::ApplyError::Future) => Err(ApplyError::Future),
-			Err(internal::ApplyError::FullBlock) => Err(ApplyError::FullBlock),
-		}
+		Self::apply_extrinsic_with_len(uxt, encoded_len, Some(encoded))
 	}
 
 	/// Apply an extrinsic inside the block execution function.
 	fn apply_extrinsic_no_note(uxt: Block::Extrinsic) {
 		let l = uxt.encode().len();
 		match Self::apply_extrinsic_with_len(uxt, l, None) {
-			Ok(internal::ApplyOutcome::Success) => (),
-			Ok(internal::ApplyOutcome::Fail(e)) => runtime_io::print(e),
-			Err(internal::ApplyError::CantPay) => panic!("All extrinsics should have sender able to pay their fees"),
-			Err(internal::ApplyError::BadSignature(_)) => panic!("All extrinsics should be properly signed"),
-			Err(internal::ApplyError::Stale) | Err(internal::ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
-			Err(internal::ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
+			Ok(ApplyOutcome::Success) => (),
+			Ok(ApplyOutcome::Fail(e)) => {
+				runtime_io::print("Error:");
+				runtime_io::print(e.module as u64);
+				runtime_io::print(e.error as u64);
+				if let Some(msg) = e.message {
+					runtime_io::print(msg);
+				}
+			},
+			Err(ApplyError::CantPay) => panic!("All extrinsics should have sender able to pay their fees"),
+			Err(ApplyError::BadSignature) => panic!("All extrinsics should be properly signed"),
+			Err(ApplyError::Stale) | Err(ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
+			Err(ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
 		}
 	}
 
 	/// Actually apply an extrinsic given its `encoded_len`; this doesn't note its hash.
-	fn apply_extrinsic_with_len(uxt: Block::Extrinsic, encoded_len: usize, to_note: Option<Vec<u8>>) -> result::Result<internal::ApplyOutcome, internal::ApplyError> {
+	fn apply_extrinsic_with_len(uxt: Block::Extrinsic, encoded_len: usize, to_note: Option<Vec<u8>>) -> ApplyResult {
 
 		// Verify that the signature is good.
-		let xt = uxt.check(&Default::default()).map_err(internal::ApplyError::BadSignature)?;
+		let xt = uxt.check(&Default::default()).map_err(ApplyError::BadSignature)?;
 
 		// Check the size of the block if that extrinsic is applied.
 		if <system::Module<System>>::all_extrinsics_len() + encoded_len as u32 > internal::MAX_TRANSACTIONS_SIZE {
-			return Err(internal::ApplyError::FullBlock);
+			return Err(ApplyError::FullBlock);
 		}
 
 		if let (Some(sender), Some(index)) = (xt.sender(), xt.index()) {
 			// check index
 			let expected_index = <system::Module<System>>::account_nonce(sender);
 			if index != &expected_index { return Err(
-				if index < &expected_index { internal::ApplyError::Stale } else { internal::ApplyError::Future }
+				if index < &expected_index { ApplyError::Stale } else { ApplyError::Future }
 			) }
 
 			// pay any fees
-			Payment::charge_extrinsic_fee(sender, encoded_len, &xt).map_err(|_| internal::ApplyError::CantPay)?;
+			Payment::charge_extrinsic_fee(sender, encoded_len, &xt).map_err(|_| ApplyError::CantPay)?;
 
 			// AUDIT: Under no circumstances may this function panic from here onwards.
 
@@ -263,12 +251,12 @@ impl<
 
 		// Decode parameters and dispatch
 		let (f, s) = xt.deconstruct();
-		let r = f.dispatch(s.into());
+		let r = f.dispatch(s.into()).map_err(Into::<DispatchError>::into);
 		<system::Module<System>>::note_applied_extrinsic(&r, encoded_len as u32);
 
-		r.map(|_| internal::ApplyOutcome::Success).or_else(|e| match e {
-			primitives::BLOCK_FULL => Err(internal::ApplyError::FullBlock),
-			e => Ok(internal::ApplyOutcome::Fail(e))
+		Ok(match r {
+			Ok(_) => ApplyOutcome::Success,
+			Err(e) => ApplyOutcome::Fail(e),
 		})
 	}
 
@@ -309,12 +297,17 @@ impl<
 		let xt = match uxt.check(&Default::default()) {
 			// Checks out. Carry on.
 			Ok(xt) => xt,
-			// An unknown account index implies that the transaction may yet become valid.
-			Err("invalid account index") => return TransactionValidity::Unknown(INVALID_INDEX),
-			// Technically a bad signature could also imply an out-of-date account index, but
-			// that's more of an edge case.
-			Err(primitives::BAD_SIGNATURE) => return TransactionValidity::Invalid(ApplyError::BadSignature as i8),
-			Err(_) => return TransactionValidity::Invalid(UNKNOWN_ERROR),
+			Err(err) => return match err.into() {
+				// An unknown account index implies that the transaction may yet become valid.
+				// TODO: avoid hardcoded error string here #2953
+				PrimitiveError::Unknown("invalid account index") =>
+					TransactionValidity::Unknown(INVALID_INDEX),
+				// Technically a bad signature could also imply an out-of-date account index, but
+				// that's more of an edge case.
+				PrimitiveError::BadSignature =>
+					TransactionValidity::Invalid(ApplyError::BadSignature as i8),
+				_ => TransactionValidity::Invalid(UNKNOWN_ERROR),
+			}
 		};
 
 		if let (Some(sender), Some(index)) = (xt.sender(), xt.index()) {
@@ -368,7 +361,7 @@ mod tests {
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Digest, DigestItem, Header, Block};
 	use primitives::testing::doughnut::DummyDoughnut;
-	use srml_support::{additional_traits::DispatchVerifier, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::DispatchVerifier, traits::Currency, impl_outer_origin, impl_outer_error, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -383,8 +376,14 @@ mod tests {
 		}
 	}
 
+	impl_outer_error! {
+		pub enum Error for Runtime {
+			balances
+		}
+	}
+
 	pub struct DummyDispatchVerifier;
-	
+
 	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier {
 		const DOMAIN: &'static str = "test";
 		fn verify(
@@ -413,6 +412,7 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = DummyDoughnut;
 		type DispatchVerifier = DummyDispatchVerifier;
+		type Error = Error;
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
@@ -422,6 +422,7 @@ mod tests {
 		type TransactionPayment = ();
 		type DustRemoval = ();
 		type TransferPayment = ();
+		type Error = Error;
 	}
 
 	impl ChargeExtrinsicFee<<Self as system::Trait>::AccountId, TestXt> for Runtime {

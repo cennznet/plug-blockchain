@@ -21,13 +21,17 @@
 use primitives::{BuildStorage, traits::IdentityLookup, testing::{Digest, DigestItem, Header}};
 use primitives::generic::DigestItem as GenDigestItem;
 use runtime_io;
-use srml_support::{impl_outer_origin, impl_outer_event};
+use srml_support::{impl_outer_origin, impl_outer_error, impl_outer_event};
 use substrate_primitives::{H256, Blake2Hasher};
 use parity_codec::{Encode, Decode};
 use crate::{GenesisConfig, Trait, Module, RawLog};
 
 impl_outer_origin!{
 	pub enum Origin for Test {}
+}
+
+impl_outer_error! {
+	pub enum Error for Test {}
 }
 
 impl From<RawLog<u64, u64>> for DigestItem {
@@ -39,11 +43,13 @@ impl From<RawLog<u64, u64>> for DigestItem {
 // Workaround for https://github.com/rust-lang/rust/issues/26925 . Remove when sorted.
 #[derive(Clone, PartialEq, Eq, Debug, Decode, Encode)]
 pub struct Test;
+
 impl Trait for Test {
 	type Log = DigestItem;
 	type SessionKey = u64;
 	type Event = TestEvent;
 }
+
 impl system::Trait for Test {
 	type Origin = Origin;
 	type Index = u64;
@@ -58,6 +64,7 @@ impl system::Trait for Test {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 
 mod grandpa {

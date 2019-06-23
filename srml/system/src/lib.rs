@@ -79,10 +79,11 @@ use rstd::map;
 use primitives::traits::{self, CheckEqual, SimpleArithmetic, SimpleBitOps, One, Bounded, Lookup,
 	Hash, Member, MaybeDisplay, EnsureOrigin, Digest as DigestT, As, CurrentHeight, BlockNumberToHash,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup};
+use primitives::Error as PrimitiveError;
 use substrate_primitives::storage::well_known_keys;
 use srml_support::{
 	additional_traits::DispatchVerifier as DispatchVerifierT, storage, StorageValue, StorageMap,
-	Parameter, decl_module, decl_event, decl_storage,
+	Parameter, decl_module, decl_event, decl_storage, decl_error
 };
 use safe_mix::TripletMix;
 use parity_codec::{Encode, Decode};
@@ -163,7 +164,8 @@ pub trait Trait: 'static + Eq + Clone {
 	/// Used to define the type and conversion mechanism for referencing accounts in transactions. It's perfectly
 	/// reasonable for this to be an identity conversion (with the source type being `AccountId`), but other modules
 	/// (e.g. Indices module) may provide more functional/efficient alternatives.
-	type Lookup: StaticLookup<Target = Self::AccountId>;
+	// TODO: avoid &'static str error type #2953
+	type Lookup: StaticLookup<Target = Self::AccountId, Error = &'static str>;
 
 	/// The block header.
 	type Header: Parameter + traits::Header<
@@ -174,6 +176,9 @@ pub trait Trait: 'static + Eq + Clone {
 
 	/// The aggregated event type of the runtime.
 	type Event: Parameter + Member + From<Event>;
+
+	/// The aggregated error type of the runtime.
+	type Error: Member + From<Error> + From<&'static str> + runtime_io::Printable;
 
 	/// A piece of information that can be part of the digest (as a digest item).
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
@@ -189,6 +194,8 @@ pub type DigestItemOf<T> = <<T as Trait>::Digest as traits::Digest>::Item;
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+		type Error = T::Error;
+
 		/// Deposits an event into this block's event record.
 		pub fn deposit_event(event: T::Event) {
 			let extrinsic_index = Self::extrinsic_index();
@@ -233,9 +240,44 @@ decl_event!(
 		/// An extrinsic completed successfully.
 		ExtrinsicSuccess,
 		/// An extrinsic failed.
-		ExtrinsicFailed,
+		ExtrinsicFailed(DispatchError),
 	}
 );
+
+decl_error! {
+	/// Error for the System module
+	pub enum Error {
+		BadSignature,
+		BlockFull,
+		RequireSignedOrigin,
+		RequireRootOrigin,
+		RequireNoOrigin,
+	}
+}
+
+impl From<PrimitiveError> for Error {
+	fn from(err: PrimitiveError) -> Error {
+		match err {
+			PrimitiveError::Unknown(err) => Error::Unknown(err),
+			PrimitiveError::BadSignature => Error::BadSignature,
+			PrimitiveError::BlockFull => Error::BlockFull,
+		}
+	}
+}
+
+// Exists for for backward compatibility purpose.
+impl From<Error> for &'static str {
+	fn from(err: Error) -> &'static str {
+		match err {
+			Error::Unknown(val) => val,
+			Error::BadSignature => "bad signature in extrinsic",
+			Error::BlockFull => "block size limit is reached",
+			Error::RequireSignedOrigin => "bad origin: expected to be a signed origin",
+			Error::RequireRootOrigin => "bad origin: expected to be a root origin",
+			Error::RequireNoOrigin => "bad origin: expected to be no origin",
+		}
+	}
+}
 
 /// Origin for the System module.
 #[derive(PartialEq, Eq, Clone)]
@@ -348,39 +390,40 @@ decl_storage! {
 pub struct EnsureRoot<AccountId>(::rstd::marker::PhantomData<AccountId>);
 impl<O: Into<Option<RawOrigin<AccountId>>>, AccountId> EnsureOrigin<O> for EnsureRoot<AccountId> {
 	type Success = ();
-	fn ensure_origin(o: O) -> Result<Self::Success, &'static str> {
+	type Error = &'static str;
+	fn ensure_origin(o: O) -> Result<Self::Success, Self::Error> {
 		ensure_root(o)
 	}
 }
 
 /// Ensure that the origin `o` represents a signed extrinsic (i.e. transaction).
 /// Returns `Ok` with the account that signed the extrinsic or an `Err` otherwise.
-pub fn ensure_signed<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<AccountId, &'static str>
+pub fn ensure_signed<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<AccountId, Error>
 	where OuterOrigin: Into<Option<RawOrigin<AccountId>>>
 {
 	match o.into() {
 		Some(RawOrigin::Signed(t)) => Ok(t),
-		_ => Err("bad origin: expected to be a signed origin"),
+		_ => Err(Error::RequireSignedOrigin),
 	}
 }
 
 /// Ensure that the origin `o` represents the root. Returns `Ok` or an `Err` otherwise.
-pub fn ensure_root<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), &'static str>
+pub fn ensure_root<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), Error>
 	where OuterOrigin: Into<Option<RawOrigin<AccountId>>>
 {
 	match o.into() {
 		Some(RawOrigin::Root) => Ok(()),
-		_ => Err("bad origin: expected to be a root origin"),
+		_ => Err(Error::RequireRootOrigin),
 	}
 }
 
 /// Ensure that the origin `o` represents an unsigned extrinsic. Returns `Ok` or an `Err` otherwise.
-pub fn ensure_inherent<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), &'static str>
+pub fn ensure_inherent<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), Error>
 	where OuterOrigin: Into<Option<RawOrigin<AccountId>>>
 {
 	match o.into() {
 		Some(RawOrigin::Inherent) => Ok(()),
-		_ => Err("bad origin: expected to be an inherent origin"),
+		_ => Err(Error::RequireNoOrigin),
 	}
 }
 
@@ -544,10 +587,10 @@ impl<T: Trait> Module<T> {
 	}
 
 	/// To be called immediately after an extrinsic has been applied.
-	pub fn note_applied_extrinsic(r: &Result<(), &'static str>, encoded_len: u32) {
+	pub fn note_applied_extrinsic(r: &Result<(), DispatchError>, encoded_len: u32) {
 		Self::deposit_event(match r {
 			Ok(_) => Event::ExtrinsicSuccess,
-			Err(_) => Event::ExtrinsicFailed,
+			Err(err) => Event::ExtrinsicFailed(err.clone()),
 		}.into());
 
 		let next_extrinsic_index = Self::extrinsic_index().unwrap_or_default() + 1u32;
@@ -582,7 +625,8 @@ impl<T> Default for ChainContext<T> {
 impl<T: Trait> Lookup for ChainContext<T> {
 	type Source = <T::Lookup as StaticLookup>::Source;
 	type Target = <T::Lookup as StaticLookup>::Target;
-	fn lookup(&self, s: Self::Source) -> rstd::result::Result<Self::Target, &'static str> {
+	type Error = <T::Lookup as StaticLookup>::Error;
+	fn lookup(&self, s: Self::Source) -> rstd::result::Result<Self::Target, Self::Error> {
 		<T::Lookup as StaticLookup>::lookup(s)
 	}
 }
@@ -610,10 +654,14 @@ mod tests {
 	use primitives::BuildStorage;
 	use primitives::traits::{BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Digest, DigestItem, Header};
-	use srml_support::impl_outer_origin;
+	use srml_support::{impl_outer_origin, impl_outer_error};
 
-	impl_outer_origin!{
+	impl_outer_origin! {
 		pub enum Origin for Test where system = super {}
+	}
+
+	impl_outer_error! {
+		pub enum Error for Test where system = super {}
 	}
 
 	#[derive(Clone, Eq, PartialEq)]
@@ -632,13 +680,14 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = ();
 		type DispatchVerifier = ();
+		type Error = Error;
 	}
 
 	impl From<Event> for u16 {
 		fn from(e: Event) -> u16 {
 			match e {
 				Event::ExtrinsicSuccess => 100,
-				Event::ExtrinsicFailed => 101,
+				Event::ExtrinsicFailed(err) => Encode::using_encoded(&err, |s| (s[0] as u16) | ((s[1] as u16) << 8)),
 			}
 		}
 	}
@@ -664,14 +713,14 @@ mod tests {
 			System::initialize(&2, &[0u8; 32].into(), &[0u8; 32].into());
 			System::deposit_event(42u16);
 			System::note_applied_extrinsic(&Ok(()), 0);
-			System::note_applied_extrinsic(&Err(""), 0);
+			System::note_applied_extrinsic(&Err(DispatchError { module: 1, error: 2, message: None }), 0);
 			System::note_finished_extrinsics();
 			System::deposit_event(3u16);
 			System::finalize();
 			assert_eq!(System::events(), vec![
 				EventRecord { phase: Phase::ApplyExtrinsic(0), event: 42u16 },
 				EventRecord { phase: Phase::ApplyExtrinsic(0), event: 100u16 },
-				EventRecord { phase: Phase::ApplyExtrinsic(1), event: 101u16 },
+				EventRecord { phase: Phase::ApplyExtrinsic(1), event: 0x0201u16 },
 				EventRecord { phase: Phase::Finalization, event: 3u16 }
 			]);
 		});

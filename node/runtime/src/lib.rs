@@ -61,8 +61,8 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: create_runtime_str!("node"),
 	impl_name: create_runtime_str!("substrate-node"),
 	authoring_version: 10,
-	spec_version: 73,
-	impl_version: 74,
+	spec_version: 99,
+	impl_version: 99,
 	apis: RUNTIME_API_VERSIONS,
 };
 
@@ -109,6 +109,7 @@ impl system::Trait for Runtime {
 	type Log = Log;
 	type Doughnut = Doughnut;
 	type DispatchVerifier = Self;
+	type Error = Error;
 }
 
 impl aura::Trait for Runtime {
@@ -130,6 +131,7 @@ impl balances::Trait for Runtime {
 	type TransactionPayment = ();
 	type DustRemoval = ();
 	type TransferPayment = ();
+	type Error = Error;
 }
 
 impl consensus::Trait for Runtime {
@@ -233,7 +235,7 @@ construct_runtime!(
 		Timestamp: timestamp::{Module, Call, Storage, Config<T>, Inherent},
 		Consensus: consensus::{Module, Call, Storage, Config<T>, Log(AuthoritiesChange), Inherent},
 		Indices: indices,
-		Balances: balances,
+		Balances: balances::{default, Error},
 		Session: session,
 		Staking: staking::{default, OfflineWorker},
 		Democracy: democracy,

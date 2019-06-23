@@ -519,7 +519,7 @@ impl<T: Trait> OnFreeBalanceZero<T::AccountId> for Module<T> {
 mod tests {
 	use super::*;
 	use runtime_io::with_externalities;
-	use srml_support::{impl_outer_origin, impl_outer_dispatch, assert_noop, assert_ok};
+	use srml_support::{impl_outer_origin, impl_outer_error, impl_outer_dispatch, assert_noop, assert_ok};
 	use substrate_primitives::{H256, Blake2Hasher};
 	use primitives::BuildStorage;
 	use primitives::traits::{BlakeTwo256, IdentityLookup};
@@ -535,8 +535,16 @@ mod tests {
 
 	impl_outer_dispatch! {
 		pub enum Call for Test where origin: Origin {
+			type Error = Error;
+
 			balances::Balances,
 			democracy::Democracy,
+		}
+	}
+
+	impl_outer_error! {
+		pub enum Error for Test {
+			balances,
 		}
 	}
 
@@ -557,6 +565,7 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = ();
 		type DispatchVerifier = ();
+		type Error = Error;
 	}
 	impl balances::Trait for Test {
 		type Balance = u64;
@@ -566,6 +575,7 @@ mod tests {
 		type TransactionPayment = ();
 		type TransferPayment = ();
 		type DustRemoval = ();
+		type Error = Error;
 	}
 	impl Trait for Test {
 		type Currency = balances::Module<Self>;

@@ -330,7 +330,7 @@ impl<T: Trait> OnFreeBalanceZero<T::AccountId> for Module<T> {
 mod tests {
 	use super::*;
 	use std::cell::RefCell;
-	use srml_support::{impl_outer_origin, assert_ok};
+	use srml_support::{impl_outer_origin, impl_outer_error, assert_ok};
 	use runtime_io::with_externalities;
 	use substrate_primitives::{H256, Blake2Hasher};
 	use primitives::BuildStorage;
@@ -339,6 +339,10 @@ mod tests {
 
 	impl_outer_origin!{
 		pub enum Origin for Test {}
+	}
+
+	impl_outer_error! {
+		pub enum Error for Test {}
 	}
 
 	thread_local!{
@@ -373,6 +377,7 @@ mod tests {
 		type Log = DigestItem;
 		type Doughnut = ();
 		type DispatchVerifier = ();
+		type Error = Error;
 	}
 	impl timestamp::Trait for Test {
 		type Moment = u64;

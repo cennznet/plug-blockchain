@@ -33,7 +33,7 @@ use runtime_primitives::testing::{Digest, DigestItem, Header, UintAuthorityId, H
 use runtime_primitives::traits::{As, BlakeTwo256, IdentityLookup};
 use runtime_primitives::BuildStorage;
 use srml_support::{
-	assert_ok, impl_outer_dispatch, impl_outer_event, impl_outer_origin, storage::child,
+	assert_ok, impl_outer_dispatch, impl_outer_event, impl_outer_origin, impl_outer_error, storage::child,
 	traits::Currency, StorageMap,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -59,12 +59,20 @@ impl_outer_origin! {
 }
 impl_outer_dispatch! {
 	pub enum Call for Test where origin: Origin {
+		type Error = Error;
+
 		balances::Balances,
 		contract::Contract,
 	}
 }
 
-#[derive(Clone, Eq, PartialEq)]
+impl_outer_error! {
+	pub enum Error for Test {
+		balances
+	}
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Test;
 impl system::Trait for Test {
 	type Origin = Origin;
@@ -80,6 +88,7 @@ impl system::Trait for Test {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 impl balances::Trait for Test {
 	type Balance = u64;
@@ -89,6 +98,7 @@ impl balances::Trait for Test {
 	type TransactionPayment = ();
 	type DustRemoval = ();
 	type TransferPayment = ();
+	type Error = Error;
 }
 impl timestamp::Trait for Test {
 	type Moment = u64;

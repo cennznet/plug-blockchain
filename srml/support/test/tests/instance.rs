@@ -54,6 +54,7 @@ mod system {
 
 	srml_support::decl_module! {
 		pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+			type Error = Error;
 			pub fn deposit_event(_event: T::Event) {
 			}
 		}
@@ -107,6 +108,11 @@ mod system {
 		match o.into() {
 			Some(RawOrigin::Root) => Ok(()),
 			_ => Err("bad origin: expected to be a root origin"),
+		}
+	}
+
+	srml_support::decl_error! {
+		pub enum Error {
 		}
 	}
 }

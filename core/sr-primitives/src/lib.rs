@@ -45,18 +45,41 @@ pub mod doughnut {
 	pub use doughnut::v0::parity::DoughnutV0;
 }
 
-/// A message indicating an invalid signature in extrinsic.
-pub const BAD_SIGNATURE: &str = "bad signature in extrinsic";
+#[cfg_attr(test, derive(PartialEq, Debug))]
+/// Error type
+pub enum Error {
+	/// Unknown error
+	/// This exists only to make implementation easier. Should be avoid as much as possible.
+	Unknown(&'static str),
+	/// Indicating an invalid signature in extrinsic.
+	BadSignature,
+	/// Full block error.
+	///
+	/// This allows modules to indicate that given transaction is potentially valid
+	/// in the future, but can't be executed in the current state.
+	/// Note this error should be returned early in the execution to prevent DoS,
+	/// cause the fees are not being paid if this error is returned.
+	///
+	/// Example: block gas limit is reached (the transaction can be retried in the next block though).
+	BlockFull,
+}
 
-/// Full block error message.
-///
-/// This allows modules to indicate that given transaction is potentially valid
-/// in the future, but can't be executed in the current state.
-/// Note this error should be returned early in the execution to prevent DoS,
-/// cause the fees are not being paid if this error is returned.
-///
-/// Example: block gas limit is reached (the transaction can be retried in the next block though).
-pub const BLOCK_FULL: &str = "block size limit is reached";
+// Exists for for backward compatibility purpose.
+impl Into<&'static str> for Error {
+	fn into(self) -> &'static str {
+		match self {
+			Error::Unknown(val) => val,
+			Error::BadSignature => "bad signature in extrinsic",
+			Error::BlockFull => "block size limit is reached",
+		}
+	}
+}
+
+impl From<&'static str> for Error {
+	fn from(val: &'static str) -> Error {
+		Error::Unknown(val)
+	}
+}
 
 /// Justification type.
 pub type Justification = Vec<u8>;
@@ -457,22 +480,15 @@ impl From<ed25519::Signature> for AnySignature {
 	}
 }
 
-#[derive(Eq, PartialEq, Clone, Copy, Decode)]
-#[cfg_attr(feature = "std", derive(Debug, Serialize))]
-#[repr(u8)]
-/// Outcome of a valid extrinsic application. Capable of being sliced.
-pub enum ApplyOutcome {
-	/// Successful application (extrinsic reported no issue).
-	Success = 0,
-	/// Failed application (extrinsic was probably a no-op other than fees).
-	Fail = 1,
-}
-
-impl codec::Encode for ApplyOutcome {
-	fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
-		f(&[*self as u8])
-	}
-}
+#[derive(Eq, PartialEq, Clone, Copy, Encode, Decode)]
+ #[cfg_attr(feature = "std", derive(Debug, Serialize))]
+ /// Outcome of a valid extrinsic application. Capable of being sliced.
+ pub enum ApplyOutcome {
+ 	/// Successful application (extrinsic reported no issue).
+ 	Success,
+ 	/// Failed application (extrinsic was probably a no-op other than fees).
+ 	Fail(DispatchError),
+ }
 
 #[derive(Eq, PartialEq, Clone, Copy, Decode)]
 #[cfg_attr(feature = "std", derive(Debug, Serialize))]
@@ -493,9 +509,37 @@ pub enum ApplyError {
 	FullBlock = 255,
 }
 
-impl codec::Encode for ApplyError {
+impl Encode for ApplyError {
 	fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
 		f(&[*self as u8])
+	}
+}
+
+#[derive(Eq, PartialEq, Clone, Copy)]
+#[cfg_attr(feature = "std", derive(Debug, Serialize))]
+/// Reason why a dispatch call failed
+pub struct DispatchError {
+	/// Module index, matching the metadata module index
+	pub module: u8,
+	/// Module specific error value
+	pub error: u8,
+	/// Optional error message.
+	pub message: Option<&'static str>,
+}
+
+impl Encode for DispatchError {
+	fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+		f(&[self.module, self.error])
+	}
+}
+
+impl Decode for DispatchError {
+	fn decode<R: codec::Input>(input: &mut R) -> Option<Self> {
+		Some(DispatchError {
+			module: input.read_byte()?,
+			error: input.read_byte()?,
+			message: None,
+		})
 	}
 }
 
@@ -752,6 +796,7 @@ impl traits::Extrinsic for OpaqueExtrinsic {
 #[cfg(test)]
 mod tests {
 	use substrate_primitives::hash::{H256, H512};
+	use super::DispatchError;
 	use crate::codec::{Encode, Decode};
 	use crate::traits::DigestItem;
 
@@ -926,5 +971,22 @@ mod tests {
 			super::Permill::from_parts(999_999) * std::u128::MAX,
 			((Into::<U256>::into(std::u128::MAX) * 999_999u32) / 1_000_000u32).as_u128()
 		);
+	}
+
+	#[test]
+	fn dispatch_error_encoding() {
+		let error = DispatchError {
+			module: 1,
+			error: 2,
+			message: Some("error message"),
+		};
+		let encoded = error.encode();
+		let decoded = DispatchError::decode(&mut &*encoded).unwrap();
+		assert_eq!(encoded, vec![1, 2]);
+		assert_eq!(decoded, DispatchError {
+			module: 1,
+			error: 2,
+			message: None,
+		});
 	}
 }

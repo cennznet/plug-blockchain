@@ -54,6 +54,11 @@ impl_outer_event! {
 	}
 }
 
+#[allow(non_camel_case_types)]
+pub enum Error {
+	system(system::Error)
+}
+
 #[derive(Clone, Eq, PartialEq)]
 pub struct Runtime;
 impl system::Trait for Runtime {
@@ -70,6 +75,7 @@ impl system::Trait for Runtime {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 
 impl module::Trait for Runtime {

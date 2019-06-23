@@ -104,7 +104,7 @@ where
 				ExecutionContext::BlockConstruction,
 				xt.clone()
 			)? {
-				Ok(ApplyOutcome::Success) | Ok(ApplyOutcome::Fail) => {
+				Ok(ApplyOutcome::Success) | Ok(ApplyOutcome::Fail(_)) => {
 					extrinsics.push(xt);
 					Ok(())
 				}

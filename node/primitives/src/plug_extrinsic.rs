@@ -10,6 +10,7 @@ use runtime_primitives::traits::{
 	self, BlockNumberToHash, Checkable, CurrentHeight, Doughnuted, Extrinsic, Lookup, MaybeDisplay,
 	Member, SimpleArithmetic, DoughnutApi,
 };
+use runtime_primitives::Error;
 
 const TRANSACTION_VERSION: u8 = 0b0000_00001;
 const MASK_VERSION: u8 = 0b0000_1111;
@@ -169,7 +170,7 @@ where
 	AccountId: Member + MaybeDisplay + Encode + Decode,
 	BlockNumber: SimpleArithmetic,
 	Hash: Encode,
-	Context: Lookup<Source = Address, Target = AccountId>
+	Context: Lookup<Source = Address, Target = AccountId, Error=&'static str>
 		+ CurrentHeight<BlockNumber = BlockNumber>
 		+ BlockNumberToHash<BlockNumber = BlockNumber, Hash = Hash>,
 	Doughnut: Encode + DoughnutApi,
@@ -177,8 +178,9 @@ where
 	<Doughnut as DoughnutApi>::Signature: Borrow<[u8; 64]>,
 {
 	type Checked = CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;
+	type Error = Error;
 
-	fn check(self, context: &Context) -> Result<Self::Checked, &'static str> {
+	fn check(self, context: &Context) -> Result<Self::Checked, Self::Error> {
 		// There's no signature so we're done
 		if self.signature.is_none() {
 			return Ok(Self::Checked {
@@ -206,7 +208,7 @@ where
 			let doughnut_signature = Signature::decode(&mut &doughnut.signature().borrow()[..]).ok_or("doughnut has incompatible signature for runtime")?;
 			let issuer = AccountId::decode(&mut doughnut.issuer().as_ref()).ok_or("doughnut has incompatible issuer for runtime")?;
 			if !doughnut_signature.verify(doughnut.payload().as_ref(), &issuer) {
-				return Err("bad signature in doughnut");
+				return Err("bad signature in doughnut".into());
 			}
 			(&index, &self.function, era, h, &doughnut).using_encoded(verify_signature)
 		} else {
@@ -214,7 +216,7 @@ where
 		};
 
 		if !verified {
-			return Err("bad signature in extrinsic");
+			return Err("bad signature in extrinsic".into());
 		}
 
 		return Ok(Self::Checked {

@@ -22,11 +22,21 @@ use primitives::BuildStorage;
 use primitives::{traits::{IdentityLookup}, testing::{Digest, DigestItem, Header}};
 use substrate_primitives::{H256, Blake2Hasher};
 use runtime_io;
-use srml_support::impl_outer_origin;
+use srml_support::{impl_outer_origin, impl_outer_error};
 use crate::{GenesisConfig, Module, Trait};
 
 impl_outer_origin!{
 	pub enum Origin for Runtime {}
+}
+
+mod balances {
+	pub use crate::Error;
+}
+
+impl_outer_error! {
+	pub enum Error for Runtime {
+		balances,
+	}
 }
 
 // Workaround for https://github.com/rust-lang/rust/issues/26925 . Remove when sorted.
@@ -46,6 +56,7 @@ impl system::Trait for Runtime {
 	type Log = DigestItem;
 	type Doughnut = ();
 	type DispatchVerifier = ();
+	type Error = Error;
 }
 impl Trait for Runtime {
 	type Balance = u64;
@@ -55,6 +66,7 @@ impl Trait for Runtime {
 	type TransactionPayment = ();
 	type DustRemoval = ();
 	type TransferPayment = ();
+	type Error = Error;
 }
 
 pub struct ExtBuilder {

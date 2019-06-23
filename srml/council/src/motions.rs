@@ -19,7 +19,7 @@
 use rstd::prelude::*;
 use rstd::result;
 use substrate_primitives::u32_trait::Value as U32;
-use primitives::traits::{Hash, EnsureOrigin};
+use primitives::traits::{Hash, EnsureOrigin, EnsureOriginError};
 use srml_support::dispatch::{Dispatchable, Parameter};
 use srml_support::{StorageValue, StorageMap, decl_module, decl_event, decl_storage, ensure};
 use super::{Trait as CouncilTrait, Module as Council};
@@ -187,12 +187,13 @@ pub fn ensure_council_members<OuterOrigin>(o: OuterOrigin, n: u32) -> result::Re
 	}
 }
 
-pub struct EnsureMembers<N: U32>(::rstd::marker::PhantomData<N>);
-impl<O, N: U32> EnsureOrigin<O> for EnsureMembers<N>
+pub struct EnsureMembers<N: U32, Error>(::rstd::marker::PhantomData<(N, Error)>);
+impl<O, N: U32, Error: EnsureOriginError> EnsureOrigin<O> for EnsureMembers<N>
 	where O: Into<Option<Origin>>
 {
 	type Success = u32;
-	fn ensure_origin(o: O) -> result::Result<Self::Success, &'static str> {
+	type Error = Error;
+	fn ensure_origin(o: O) -> result::Result<Self::Success, Self::Error> {
 		ensure_council_members(o, N::VALUE)
 	}
 }
