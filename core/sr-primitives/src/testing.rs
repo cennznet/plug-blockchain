@@ -243,6 +243,8 @@ pub mod doughnut {
 	//!
 	//! Doughnut aware types for extrinsic tests
 	//!
+	use super::*;
+	use crate::traits::{DoughnutApi, Doughnuted};
 
 	/// A test account ID. Stores a `u64` as a byte array
 	#[derive(PartialEq, Eq, Clone, Debug, Decode, Encode, PartialOrd, Serialize, Deserialize, Default, Ord)]
@@ -282,9 +284,9 @@ pub mod doughnut {
 
 	impl<Call, Doughnut> TestXt<Call, Doughnut> {
 		/// Create a new TestXt with Doughnut attached
-		pub fn new(sender: u64, index: u64, function: Call, doughnut: Option<Doughnut>) -> Self {
+		pub fn new(sender: Option<u64>, index: u64, function: Call, doughnut: Option<Doughnut>) -> Self {
 			TestXt {
-				sender: Some(TestAccountId::new(sender)),
+				sender: sender.map(|id| TestAccountId::new(id)),
 				index,
 				function,
 				doughnut: doughnut,
@@ -308,27 +310,18 @@ pub mod doughnut {
 		}
 	}
 
-	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>
-		where
-			Call: Codec + Sync + Send,
-			Doughnut: Codec + Sync + Send,
-	{
+	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>{
 		type Checked = Self;
 		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
 	}
-	impl<Call, Doughnut> traits::Extrinsic for TestXt<Call, Doughnut>
-		where
-			Call: Codec + Sync + Send,
-			Doughnut: Codec + Sync + Send,
-	{
-		fn is_signed(&self) -> Option<bool> {
-			None
-		}
+
+	impl<Call, Doughnut> traits::Extrinsic for TestXt<Call, Doughnut> {
+		fn is_signed(&self) -> Option<bool> { None }
 	}
 
 	impl<Call, Doughnut> Applyable for TestXt<Call, Doughnut> where
 		Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
-		Doughnut: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug,
+		Doughnut: 'static + Sized + Send + Sync + Eq + Codec + Debug,
 	{
 		type AccountId = TestAccountId;
 		type Index = u64;
@@ -353,8 +346,10 @@ pub mod doughnut {
 	/// A test doughnut
 	#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
 	pub struct DummyDoughnut {
-		issuer: TestAccountId,
-		holder: TestAccountId,
+		/// The issuer ID
+		pub issuer: TestAccountId,
+		/// The holder ID
+		pub holder: TestAccountId,
 	}
 
 	impl DoughnutApi for DummyDoughnut {

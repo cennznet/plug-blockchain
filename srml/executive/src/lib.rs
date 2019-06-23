@@ -397,6 +397,7 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
+		type DispatchVerifier = ();
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
@@ -408,14 +409,25 @@ mod tests {
 		type TransferPayment = ();
 	}
 
+	impl ChargeExtrinsicFee<<Self as system::Trait>::AccountId, TestXt> for Runtime {
+		// A dummy impl for test extrinsic and account id types
+		fn charge_extrinsic_fee<'a>(
+			_transactor: &<Self as system::Trait>::AccountId,
+			_encoded_len: usize,
+			_extrinsic: &'a TestXt,
+		) -> Result<(), &'static str> {
+			Ok(())
+		}
+	}
+
 	type TestXt = primitives::testing::TestXt<Call<Runtime>>;
-	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, balances::Module<Runtime>, ()>;
+	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, Runtime, ()>;
 
 	#[test]
 	fn balance_transfer_dispatch_works() {
 		let mut t = system::GenesisConfig::<Runtime>::default().build_storage().unwrap().0;
 		t.extend(balances::GenesisConfig::<Runtime> {
-			transaction_base_fee: 10,
+			transaction_base_fee: 0,
 			transaction_byte_fee: 0,
 			balances: vec![(1, 111)],
 			existential_deposit: 0,
@@ -429,7 +441,7 @@ mod tests {
 			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(),
 				[69u8; 32].into(), Digest::default()));
 			Executive::apply_extrinsic(xt).unwrap();
-			assert_eq!(<balances::Module<Runtime>>::total_balance(&1), 32);
+			assert_eq!(<balances::Module<Runtime>>::total_balance(&1), 42);
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&2), 69);
 		});
 	}

@@ -24,7 +24,7 @@ use primitives::traits::{
 	self, Applyable, Checkable, Doughnuted, Header,
 	OffchainWorker, OnFinalize, OnInitialize,
 };
-use srml_support::{Dispatchable, additional_traits::ChargeExtrinsicFee, storage};
+use srml_support::{Dispatchable, storage, additional_traits::ChargeExtrinsicFee};
 use parity_codec::{Codec, Decode, Encode};
 use primitives::{ApplyOutcome, ApplyError};
 use primitives::traits::DoughnutApi;
@@ -194,7 +194,7 @@ mod tests {
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Block, Digest, DigestItem, Header};
 	use primitives::testing::doughnut::{DummyDoughnut, TestAccountId, TestXt as DoughnutedTestXt};
-	use srml_support::{additional_traits::ChargeExtrinsicFee, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::{ChargeExtrinsicFee, DispatchVerifier}, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -206,6 +206,18 @@ mod tests {
 	impl_outer_event!{
 		pub enum MetaEvent for Runtime {
 			balances<T>,
+		}
+	}
+
+	pub struct DummyDispatchVerifier<Doughnut>(PhantomData<Doughnut>);
+	
+	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier<DummyDoughnut> {
+		fn verify(
+			&doughnut: DummyDoughnut,
+			"module": &str,
+			"method": &str,
+		) -> Result<(), &'static str> {
+			Ok(())
 		}
 	}
 
@@ -224,7 +236,8 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
-		type DispatchVerifier = ();
+		type Doughnut = DummyDoughnut;
+		type DispatchVerifier = DummyDispatchVerifier;
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
@@ -237,25 +250,13 @@ mod tests {
 	}
 
 	type TestXt = DoughnutedTestXt<Call<Runtime>, DummyDoughnut>;
-	type Executive = super::DoughnutExecutive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, DummyChargeExtrinsicFee, ()>;
-
-	struct DummyChargeExtrinsicFee;
-	impl ChargeExtrinsicFee<TestAccountId, TestXt> for DummyChargeExtrinsicFee {
-		// A dummy impl for test extrinsic and account id types
-		fn charge_extrinsic_fee<'a>(
-			_transactor: &TestAccountId,
-			_encoded_len: usize,
-			_extrinsic: &'a TestXt,
-		) -> Result<(), &'static str> {
-			Ok(())
-		}
-	}
+	type Executive = super::DoughnutExecutive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, balances::Module<Runtime>, ()>;
 
 	#[test]
 	fn balance_transfer_dispatch_works() {
 		let mut t = system::GenesisConfig::<Runtime>::default().build_storage().unwrap().0;
 		t.extend(balances::GenesisConfig::<Runtime> {
-			transaction_base_fee: 10,
+			transaction_base_fee: 0,
 			transaction_byte_fee: 0,
 			balances: vec![(TestAccountId::new(1), 111)],
 			existential_deposit: 0,
@@ -263,13 +264,13 @@ mod tests {
 			creation_fee: 0,
 			vesting: vec![],
 		}.build_storage().unwrap().0);
-		let xt = DoughnutedTestXt::new(Some(1), 0, Call::transfer(TestAccountId::new(2), 69));
+		let xt = DoughnutedTestXt::new(Some(1), 0, Call::transfer(TestAccountId::new(2), 69), None);
 		let mut t = runtime_io::TestExternalities::<Blake2Hasher>::new(t);
 		with_externalities(&mut t, || {
 			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(),
 				[69u8; 32].into(), Digest::default()));
 			Executive::apply_extrinsic(xt).unwrap();
-			assert_eq!(<balances::Module<Runtime>>::total_balance(&TestAccountId::new(1)), 32);
+			assert_eq!(<balances::Module<Runtime>>::total_balance(&TestAccountId::new(1)), 42);
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&TestAccountId::new(2)), 69);
 		});
 	}
@@ -333,7 +334,7 @@ mod tests {
 	#[test]
 	fn bad_extrinsic_not_inserted() {
 		let mut t = new_test_ext();
-		let xt = DoughnutedTestXt::new(Some(1), 42, Call::transfer(TestAccountId::new(33), 69));
+		let xt = DoughnutedTestXt::new(Some(1), 42, Call::transfer(TestAccountId::new(33), 69), None);
 		with_externalities(&mut t, || {
 			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(), [69u8; 32].into(), Digest::default()));
 			assert!(Executive::apply_extrinsic(xt).is_err());
@@ -345,8 +346,8 @@ mod tests {
 	fn block_size_limit_enforced() {
 		let run_test = |should_fail: bool| {
 			let mut t = new_test_ext();
-			let xt = DoughnutedTestXt::new(Some(1), 0, Call::transfer(TestAccountId::new(33), 69));
-			let xt2 = DoughnutedTestXt::new(Some(1), 1, Call::transfer(TestAccountId::new(33), 69));
+			let xt = DoughnutedTestXt::new(Some(1), 0, Call::transfer(TestAccountId::new(33), 69), None);
+			let xt2 = DoughnutedTestXt::new(Some(1), 1, Call::transfer(TestAccountId::new(33), 69), None);
 			let encoded = xt2.encode();
 			let len = if should_fail { (internal::MAX_TRANSACTIONS_SIZE - 1) as usize } else { encoded.len() };
 			with_externalities(&mut t, || {
@@ -356,13 +357,14 @@ mod tests {
 				Executive::apply_extrinsic(xt).unwrap();
 				let res = Executive::apply_extrinsic_with_len(xt2, len, Some(encoded));
 
+				// +1 byte for doughnut
 				if should_fail {
 					assert!(res.is_err());
-					assert_eq!(<system::Module<Runtime>>::all_extrinsics_len(), 28);
+					assert_eq!(<system::Module<Runtime>>::all_extrinsics_len(), 29);
 					assert_eq!(<system::Module<Runtime>>::extrinsic_index(), Some(1));
 				} else {
 					assert!(res.is_ok());
-					assert_eq!(<system::Module<Runtime>>::all_extrinsics_len(), 56);
+					assert_eq!(<system::Module<Runtime>>::all_extrinsics_len(), 58);
 					assert_eq!(<system::Module<Runtime>>::extrinsic_index(), Some(2));
 				}
 			});
@@ -371,4 +373,55 @@ mod tests {
 		run_test(false);
 		run_test(true);
 	}
+
+	// Test:
+	// - signer nonce is incremented
+	// - doughnut is put in storage
+	// - doughnut storage is cleared
+	// - error when doughnut signer != holder
+	// - issuer pays fees
+	// - good doughnut, execution continues as normal
+
+	// extrinsic e2e codec tests
+	// - bad doughnut signature fails
+
+	#[test]
+	fn balance_transfer_dispatch_works_with_doughnut() {
+		let mut t = system::GenesisConfig::<Runtime>::default().build_storage().unwrap().0;
+		// The doughnut is not semantically verified in this runtime.
+		// This just checks the execution flow up to dispatch path with a valid doughnut
+		let alice = TestAccountId::new(1);
+		let bob = TestAccountId::new(2);
+		let charlie = TestAccountId::new(3);
+		t.extend(balances::GenesisConfig::<Runtime> {
+			transaction_base_fee: 0,
+			transaction_byte_fee: 0,
+			balances: vec![
+				(alice.clone(), 100),
+				(bob.clone(), 50),
+				(charlie.clone(), 0),
+			],
+			existential_deposit: 0,
+			transfer_fee: 0,
+			creation_fee: 0,
+			vesting: vec![],
+		}.build_storage().unwrap().0);
+
+		let doughnut = DummyDoughnut {
+			issuer: alice.clone(),
+			holder: bob.clone(),
+		};
+		// Bob signs a tx to send 30 of alice balance to charlie
+		let xt = DoughnutedTestXt::new(Some(2), 0, Call::transfer(charlie.clone(), 69), Some(doughnut));
+		let mut t = runtime_io::TestExternalities::<Blake2Hasher>::new(t);
+		with_externalities(&mut t, || {
+			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(),
+				[69u8; 32].into(), Digest::default()));
+			Executive::apply_extrinsic(xt).unwrap();
+			assert_eq!(<balances::Module<Runtime>>::total_balance(&alice), 70);
+			assert_eq!(<balances::Module<Runtime>>::total_balance(&bob), 50);
+			assert_eq!(<balances::Module<Runtime>>::total_balance(&charlie), 30);
+		});
+	}
+
 }

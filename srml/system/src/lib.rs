@@ -179,8 +179,10 @@ pub trait Trait: 'static + Eq + Clone {
 	/// A piece of information that can be part of the digest (as a digest item).
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
 
+	/// The runtime doughnut type
+	type Doughnut;
 	/// A type which can verify a doughnut in order to dispatch a runtime call
-	type DispatchVerifier: DispatchVerifierT<Doughnut>;
+	type DispatchVerifier: DispatchVerifierT<Self::Doughnut>;
 }
 
 pub type DigestItemOf<T> = <<T as Trait>::Digest as traits::Digest>::Item;

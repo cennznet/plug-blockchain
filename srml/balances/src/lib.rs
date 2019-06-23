@@ -147,6 +147,7 @@
 use rstd::prelude::*;
 use rstd::{cmp, result};
 use parity_codec::{Codec, Encode, Decode};
+use srml_support::additional_traits::ChargeExtrinsicFee;
 use srml_support::{StorageValue, StorageMap, Parameter, decl_event, decl_storage, decl_module};
 use srml_support::traits::{
 	UpdateBalanceOutcome, Currency, OnFreeBalanceZero, MakePayment, OnUnbalanced,
@@ -1024,6 +1025,17 @@ impl<T: Trait<I>, I: Instance, Extrinsic> MakePayment<T::AccountId, Extrinsic> f
 		)?;
 		T::TransactionPayment::on_unbalanced(imbalance);
 		Ok(())
+	}
+}
+
+impl<T: Trait<I>, I: Instance, Extrinsic> ChargeExtrinsicFee<T::AccountId, Extrinsic> for Module<T, I> {
+	/// Just a proxy to MakePayment
+	fn charge_extrinsic_fee<'a>(
+		transactor: &T::AccountId,
+		encoded_len: usize,
+		extrinsic: &'a Extrinsic,
+	) -> Result {
+		Self::make_payment(transactor, encoded_len, extrinsic)
 	}
 }
 
