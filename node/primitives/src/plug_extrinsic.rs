@@ -50,8 +50,8 @@ pub struct PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut> {
 	pub function: Call,
 	/// Doughnut attached, if any
 	pub doughnut: Option<Doughnut>,
-	/// phantom to pipe through AccountId
-	pub phantom: rstd::marker::PhantomData<AccountId>,
+	/// phantom for AccountId
+	_phantom: rstd::marker::PhantomData<AccountId>,
 }
 
 /// Definition of something that the external world might want to say; its
@@ -120,21 +120,21 @@ impl<AccountId, Address, Index, Call, Signature, Doughnut>
 		era: Era,
 		doughnut: Option<Doughnut>,
 	) -> Self {
-		PlugExtrinsic {
+		Self {
 			signature: Some((signed, signature, index.into(), era)),
 			function,
 			doughnut,
-			phantom: rstd::marker::PhantomData,
+			_phantom: rstd::marker::PhantomData,
 		}
 	}
 
 	/// New instance of an unsigned extrinsic aka "inherent".
 	pub fn new_unsigned(function: Call) -> Self {
-		PlugExtrinsic {
+		Self {
 			signature: None,
 			function,
 			doughnut: None,
-			phantom: rstd::marker::PhantomData,
+			_phantom: rstd::marker::PhantomData,
 		}
 	}
 }
@@ -203,8 +203,8 @@ where
 
 		let verified = if let Some(ref doughnut) = self.doughnut {
 			// TODO: This may need a shim trait e.g. AsRef<bytes>
-			let doughnut_signature = Signature::decode(&mut &doughnut.signature().borrow()[..]).expect("doughnut has a valid signature");
-			let issuer = AccountId::decode(&mut doughnut.issuer().as_ref()).expect("doughnut has a valid issuer");
+			let doughnut_signature = Signature::decode(&mut &doughnut.signature().borrow()[..]).ok_or("doughnut has incompatible signature for runtime")?;
+			let issuer = AccountId::decode(&mut doughnut.issuer().as_ref()).ok_or("doughnut has incompatible issuer for runtime")?;
 			if !doughnut_signature.verify(doughnut.payload().as_ref(), &issuer) {
 				return Err("bad signature in doughnut");
 			}
@@ -268,7 +268,7 @@ where
 			signature,
 			function,
 			doughnut,
-			phantom: rstd::marker::PhantomData,
+			_phantom: rstd::marker::PhantomData,
 		})
 	}
 }

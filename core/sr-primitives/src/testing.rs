@@ -361,5 +361,6 @@ pub mod doughnut {
 		fn expiry(&self) -> Self::Timestamp { () }
 		fn payload(&self) -> Vec<u8> { Default::default() }
 		fn signature(&self) -> Self::Signature { [0u8; 64] }
+		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
 	}
 }
