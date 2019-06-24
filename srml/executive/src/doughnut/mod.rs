@@ -17,6 +17,7 @@
 //!
 //! A doughnut enabled executive impl
 //!
+use rstd::borrow::Borrow;
 use rstd::prelude::*;
 use rstd::marker::PhantomData;
 use rstd::result;
@@ -35,7 +36,7 @@ use crate::Executive;
 
 mod internal {
 	pub const MAX_TRANSACTIONS_SIZE: u32 = 4 * 1024 * 1024;
-
+	#[cfg_attr(feature = "std", derive(Debug))]
 	pub enum ApplyError {
 		BadSignature(&'static str),
 		Stale,
@@ -63,13 +64,14 @@ impl<
 	Context: Default,
 	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
 	AllModules: OnInitialize<System::BlockNumber> + OnFinalize<System::BlockNumber> + OffchainWorker<System::BlockNumber>,
-> DoughnutExecutive<System, Block, Context, Payment, AllModules> where
+> DoughnutExecutive<System, Block, Context, Payment, AllModules>
+where
 	Block::Extrinsic: Checkable<Context> + Codec,
-	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId> + Doughnuted,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::AccountId: AsRef<[u8]> + Sized,
 	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::AccountId: AsRef<[u8]> + Sized,
+	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::Signature: Borrow<[u8; 64]>,
 	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
 {
 	/// Start the execution of a particular block.
@@ -190,11 +192,11 @@ mod tests {
 	use balances::Call;
 	use runtime_io::with_externalities;
 	use substrate_primitives::{H256, Blake2Hasher};
-	use primitives::BuildStorage;
+	use primitives::{ApplyError, BuildStorage};
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Block, Digest, DigestItem, Header};
 	use primitives::testing::doughnut::{DummyDoughnut, TestAccountId, TestXt as DoughnutedTestXt};
-	use srml_support::{additional_traits::{ChargeExtrinsicFee, DispatchVerifier}, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::DispatchVerifier, assert_err, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -209,13 +211,15 @@ mod tests {
 		}
 	}
 
-	pub struct DummyDispatchVerifier<Doughnut>(PhantomData<Doughnut>);
-	
-	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier<DummyDoughnut> {
+	/// A no-op verifier
+	pub struct DummyDispatchVerifier;
+
+	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier {
+		const DOMAIN: &'static str = "test";
 		fn verify(
-			&doughnut: DummyDoughnut,
-			"module": &str,
-			"method": &str,
+			_doughnut: &DummyDoughnut,
+			_module: &str,
+			_method: &str,
 		) -> Result<(), &'static str> {
 			Ok(())
 		}
@@ -374,17 +378,6 @@ mod tests {
 		run_test(true);
 	}
 
-	// Test:
-	// - signer nonce is incremented
-	// - doughnut is put in storage
-	// - doughnut storage is cleared
-	// - error when doughnut signer != holder
-	// - issuer pays fees
-	// - good doughnut, execution continues as normal
-
-	// extrinsic e2e codec tests
-	// - bad doughnut signature fails
-
 	#[test]
 	fn balance_transfer_dispatch_works_with_doughnut() {
 		let mut t = system::GenesisConfig::<Runtime>::default().build_storage().unwrap().0;
@@ -411,8 +404,8 @@ mod tests {
 			issuer: alice.clone(),
 			holder: bob.clone(),
 		};
-		// Bob signs a tx to send 30 of alice balance to charlie
-		let xt = DoughnutedTestXt::new(Some(2), 0, Call::transfer(charlie.clone(), 69), Some(doughnut));
+		// Bob signs a tx to send 30 of alice's balance to charlie
+		let xt = DoughnutedTestXt::new(Some(2), 0, Call::transfer(charlie.clone(), 30), Some(doughnut));
 		let mut t = runtime_io::TestExternalities::<Blake2Hasher>::new(t);
 		with_externalities(&mut t, || {
 			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(),
@@ -424,4 +417,21 @@ mod tests {
 		});
 	}
 
+	#[test]
+	fn it_fails_when_xt_sender_and_doughnut_holder_are_mismatched() {
+		let alice = TestAccountId::new(1);
+		let bob = TestAccountId::new(2);
+		let doughnut = DummyDoughnut {
+			issuer: alice.clone(),
+			holder: bob.clone(),
+		};
+		// signer id `3`/charlie != holder id `2`/bob
+		let xt = DoughnutedTestXt::new(Some(3), 0, Call::transfer(bob.clone(), 30), Some(doughnut.clone()));
+
+		let mut t = new_test_ext();
+		with_externalities(&mut t, || {
+			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(), [69u8; 32].into(), Digest::default()));
+			assert_err!(Executive::apply_extrinsic(xt), ApplyError::SignerHolderMismatch);
+		});
+	}
 }

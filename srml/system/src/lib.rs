@@ -76,7 +76,6 @@ use serde::Serialize;
 use rstd::prelude::*;
 #[cfg(any(feature = "std", test))]
 use rstd::map;
-use primitives::doughnut::DoughnutV0 as Doughnut;
 use primitives::traits::{self, CheckEqual, SimpleArithmetic, SimpleBitOps, One, Bounded, Lookup,
 	Hash, Member, MaybeDisplay, EnsureOrigin, Digest as DigestT, As, CurrentHeight, BlockNumberToHash,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup};
@@ -180,8 +179,9 @@ pub trait Trait: 'static + Eq + Clone {
 	type Log: From<Log<Self>> + Into<DigestItemOf<Self>>;
 
 	/// The runtime doughnut type
-	type Doughnut;
-	/// A type which can verify a doughnut in order to dispatch a runtime call
+	type Doughnut: Decode;
+
+	/// A type which verifies a doughnut to dispatch a runtime call
 	type DispatchVerifier: DispatchVerifierT<Self::Doughnut>;
 }
 
@@ -630,6 +630,7 @@ mod tests {
 		type Header = Header;
 		type Event = u16;
 		type Log = DigestItem;
+		type Doughnut = ();
 		type DispatchVerifier = ();
 	}
 

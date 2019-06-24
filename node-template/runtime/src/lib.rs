@@ -131,7 +131,9 @@ impl system::Trait for Runtime {
 	type Log = Log;
 	/// The ubiquitous origin type.
 	type Origin = Origin;
-	/// A NO-OP dispatch verifier
+	/// The doughnut certificate type.
+	type Doughnut = ();
+	/// A NO-OP dispatch verifier.
 	type DispatchVerifier = ();
 }
 

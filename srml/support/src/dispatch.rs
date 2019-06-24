@@ -25,7 +25,6 @@ pub use srml_metadata::{
 	OuterDispatchCall, OuterDispatchMetadata,
 };
 pub use crate::additional_traits::DispatchVerifier;
-pub use sr_primitives::doughnut::DoughnutV0 as Doughnut;
 
 #[cfg(feature = "std")]
 pub use std::fmt;
@@ -927,6 +926,7 @@ macro_rules! decl_module {
 						use $crate::dispatch::DispatchVerifier;
 						// Check if a doughnut exists in this execution context and whether it grants permission to
 						// dispatch the call.
+						// TODO: Use the constant key
 						if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
 							let _ = <T as system::Trait>::DispatchVerifier::verify(
 								&doughnut,

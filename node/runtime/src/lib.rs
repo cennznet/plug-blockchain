@@ -31,8 +31,8 @@ use council::seats as council_seats;
 use council::{motions as council_motions, voting as council_voting};
 use grandpa::fg_primitives::{self, ScheduledChange};
 use node_primitives::{
-	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, Hash, Index,
-	Signature, plug_extrinsic,
+	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, Doughnut,
+	Hash, Index, Signature, plug_extrinsic,
 };
 use rstd::prelude::*;
 use runtime_primitives::traits::{
@@ -107,6 +107,7 @@ impl system::Trait for Runtime {
 	type Header = generic::Header<BlockNumber, BlakeTwo256, Log>;
 	type Event = Event;
 	type Log = Log;
+	type Doughnut = Doughnut;
 	type DispatchVerifier = Self;
 }
 
@@ -260,9 +261,9 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic =
-	plug_extrinsic::PlugExtrinsic<AccountId, Address, Index, Call, Signature>;
+	plug_extrinsic::PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>;
 /// Extrinsic type that has already been checked.
-pub type CheckedExtrinsic = plug_extrinsic::CheckedPlugExtrinsic<AccountId, Index, Call>;
+pub type CheckedExtrinsic = plug_extrinsic::CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;
 /// A type that handles payment for extrinsic fees
 pub type ExtrinsicFeePayment =
 	fee::ExtrinsicFeeCharger<Block, system::ChainContext<Runtime>, Runtime>;

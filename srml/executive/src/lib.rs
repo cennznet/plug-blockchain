@@ -367,7 +367,8 @@ mod tests {
 	use primitives::BuildStorage;
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Digest, DigestItem, Header, Block};
-	use srml_support::{traits::Currency, impl_outer_origin, impl_outer_event};
+	use primitives::testing::doughnut::DummyDoughnut;
+	use srml_support::{additional_traits::DispatchVerifier, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -379,6 +380,19 @@ mod tests {
 	impl_outer_event!{
 		pub enum MetaEvent for Runtime {
 			balances<T>,
+		}
+	}
+
+	pub struct DummyDispatchVerifier;
+	
+	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier {
+		const DOMAIN: &'static str = "test";
+		fn verify(
+			_doughnut: &DummyDoughnut,
+			_module: &str,
+			_method: &str,
+		) -> Result<(), &'static str> {
+			Ok(())
 		}
 	}
 
@@ -397,7 +411,8 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type Log = DigestItem;
-		type DispatchVerifier = ();
+		type Doughnut = DummyDoughnut;
+		type DispatchVerifier = DummyDispatchVerifier;
 	}
 	impl balances::Trait for Runtime {
 		type Balance = u64;
