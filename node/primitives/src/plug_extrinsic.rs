@@ -51,7 +51,7 @@ pub struct PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut> {
 	/// Doughnut attached, if any
 	pub doughnut: Option<Doughnut>,
 	/// phantom for AccountId
-	_phantom: rstd::marker::PhantomData<AccountId>,
+	pub _phantom: rstd::marker::PhantomData<AccountId>,
 }
 
 /// Definition of something that the external world might want to say; its

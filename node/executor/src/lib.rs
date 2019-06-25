@@ -93,14 +93,14 @@ mod tests {
 					signature: Some((indices::address::Address::Id(signed), signature, payload.0, era)),
 					function: payload.1,
 					doughnut: None,
-					phantom: std::marker::PhantomData,
+					_phantom: std::marker::PhantomData,
 				}
 			}
 			None => UncheckedExtrinsic {
 				signature: None,
 				function: xt.function,
 				doughnut: None,
-				phantom: std::marker::PhantomData,
+				_phantom: std::marker::PhantomData,
 			},
 		}
 	}
