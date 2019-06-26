@@ -79,7 +79,7 @@ use rstd::map;
 use primitives::traits::{self, CheckEqual, SimpleArithmetic, SimpleBitOps, One, Bounded, Lookup,
 	Hash, Member, MaybeDisplay, EnsureOrigin, Digest as DigestT, As, CurrentHeight, BlockNumberToHash,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup};
-use primitives::Error as PrimitiveError;
+use primitives::{Error as PrimitiveError, DispatchError};
 use substrate_primitives::storage::well_known_keys;
 use srml_support::{
 	additional_traits::DispatchVerifier as DispatchVerifierT, storage, StorageValue, StorageMap,
@@ -392,7 +392,7 @@ impl<O: Into<Option<RawOrigin<AccountId>>>, AccountId> EnsureOrigin<O> for Ensur
 	type Success = ();
 	type Error = &'static str;
 	fn ensure_origin(o: O) -> Result<Self::Success, Self::Error> {
-		ensure_root(o)
+		ensure_root(o).map_err(Into::into)
 	}
 }
 
