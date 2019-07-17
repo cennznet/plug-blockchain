@@ -201,11 +201,6 @@ where
 		};
 
 		let verified = if let Some(ref doughnut) = self.doughnut {
-			let doughnut_signature = Signature::decode(&mut doughnut.signature().as_ref()).ok_or("doughnut has incompatible signature for runtime")?;
-			let issuer = AccountId::decode(&mut doughnut.issuer().as_ref()).ok_or("doughnut has incompatible issuer for runtime")?;
-			if !doughnut_signature.verify(doughnut.payload().as_ref(), &issuer) {
-				return Err("bad signature in doughnut");
-			}
 			(&index, &self.function, era, h, &doughnut).using_encoded(verify_signature)
 		} else {
 			(&index, &self.function, era, h).using_encoded(verify_signature)
