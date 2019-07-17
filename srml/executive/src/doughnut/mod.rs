@@ -42,7 +42,6 @@ mod internal {
 		Future,
 		CantPay,
 		FullBlock,
-		SignerHolderMismatch,
 	}
 
 	pub enum ApplyOutcome {
@@ -117,7 +116,6 @@ where
 			Err(internal::ApplyError::Stale) => Err(ApplyError::Stale),
 			Err(internal::ApplyError::Future) => Err(ApplyError::Future),
 			Err(internal::ApplyError::FullBlock) => Err(ApplyError::FullBlock),
-			Err(internal::ApplyError::SignerHolderMismatch) => Err(ApplyError::SignerHolderMismatch),
 		}
 	}
 
@@ -131,7 +129,6 @@ where
 			Err(internal::ApplyError::BadSignature(_)) => panic!("All extrinsics should be properly signed"),
 			Err(internal::ApplyError::Stale) | Err(internal::ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
 			Err(internal::ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
-			Err(internal::ApplyError::SignerHolderMismatch) => panic!("Attached doughnut should have the same signer and holder"),
 		}
 	}
 
@@ -147,14 +144,6 @@ where
 		}
 
 		if let (Some(sender), Some(index)) = (xt.sender(), xt.index()) {
-
-			// check extrinsic signer is doughnut holder
-			if let Some(ref doughnut) = xt.doughnut() {
-				if sender.as_ref() != doughnut.holder().as_ref() {
-					return Err(internal::ApplyError::SignerHolderMismatch);
-				};
-			}
-
 			let expected_index = <system::Module<System>>::account_nonce(sender);
 			if index != &expected_index { return Err(
 				if index < &expected_index { internal::ApplyError::Stale } else { internal::ApplyError::Future }
@@ -463,24 +452,6 @@ mod tests {
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&alice), 70);
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&bob), 50);
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&charlie), 30);
-		});
-	}
-
-	#[test]
-	fn it_fails_when_xt_sender_and_doughnut_holder_are_mismatched() {
-		let alice = TestAccountId::new(1);
-		let bob = TestAccountId::new(2);
-		let doughnut = DummyDoughnut {
-			issuer: alice.clone(),
-			holder: bob.clone(),
-		};
-		// signer id `3`/charlie != holder id `2`/bob
-		let xt = DoughnutedTestXt::new(Some(3), 0, Call::transfer(bob.clone(), 30), Some(doughnut.clone()));
-
-		let mut t = new_test_ext();
-		with_externalities(&mut t, || {
-			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(), [69u8; 32].into(), Digest::default()));
-			assert_err!(Executive::apply_extrinsic(xt), ApplyError::SignerHolderMismatch);
 		});
 	}
 }
