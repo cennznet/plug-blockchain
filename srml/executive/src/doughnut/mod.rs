@@ -25,13 +25,15 @@ use primitives::traits::{
 	OffchainWorker, OnFinalize, OnInitialize,
 };
 use srml_support::{Dispatchable, storage, additional_traits::ChargeExtrinsicFee};
-use parity_codec::{Codec, Decode, Encode};
+use parity_codec::{Codec, Encode};
 use primitives::{ApplyOutcome, ApplyError};
-use primitives::traits::DoughnutApi;
+use primitives::traits::{DoughnutApi, DoughnutVerify};
 use primitives::transaction_validity::TransactionValidity;
 use substrate_primitives::storage::well_known_keys;
 
 use crate::Executive;
+
+type Doughnut<Block, Context> = <<<Block as traits::Block>::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut;
 
 mod internal {
 	pub const MAX_TRANSACTIONS_SIZE: u32 = 4 * 1024 * 1024;
@@ -57,7 +59,7 @@ pub struct DoughnutExecutive<System, Block, Context, Payment, AllModules>(
 );
 
 impl<
-	System: system::Trait,
+	System: system::Trait + timestamp::Trait,
 	Block: traits::Block<Header=System::Header, Hash=System::Hash>,
 	Context: Default,
 	Payment: ChargeExtrinsicFee<System::AccountId, <Block::Extrinsic as Checkable<Context>>::Checked>,
@@ -67,10 +69,8 @@ where
 	Block::Extrinsic: Checkable<Context> + Codec,
 	<Block::Extrinsic as Checkable<Context>>::Checked: Applyable<Index=System::Index, AccountId=System::AccountId> + Doughnuted,
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
-	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::AccountId: AsRef<[u8]> + Sized,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::AccountId: AsRef<[u8]> + Sized,
-	<<<Block::Extrinsic as Checkable<Context>>::Checked as Doughnuted>::Doughnut as DoughnutApi>::Signature: AsRef<[u8]> + Sized,
 	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
+	Doughnut<Block, Context>: DoughnutVerify + DoughnutApi<PublicKey=System::AccountId, Timestamp=System::Moment>,
 {
 	/// Start the execution of a particular block.
 	pub fn initialize_block(header: &System::Header) {
@@ -138,6 +138,21 @@ where
 		// Verify that the signature is good.
 		let xt = uxt.check(&Default::default()).map_err(internal::ApplyError::BadSignature)?;
 
+		// TODO: Add appropriate errors
+		if let Some(doughnut) = xt.doughnut() {
+			if let Some(sender) = xt.sender() {
+				// Check doughnut signature and validity
+				if !doughnut.verify() {
+					return Err(internal::ApplyError::BadSignature("doughnut"));
+				}
+				let _ = doughnut.validate(sender, timestamp::Module::<System>::now())
+								.map_err(|_| internal::ApplyError::BadSignature("doughnut validation"))?;
+			} else {
+				// If there's no signer then we shouldn't allow the doughnut to proceed
+				return Err(internal::ApplyError::BadSignature("no signer"));
+			}
+		}
+
 		// Check the size of the block if that extrinsic is applied.
 		if <system::Module<System>>::all_extrinsics_len() + encoded_len as u32 > internal::MAX_TRANSACTIONS_SIZE {
 			return Err(internal::ApplyError::FullBlock);
@@ -165,18 +180,18 @@ where
 		}
 
 		if let Some(doughnut) = xt.doughnut() {
-			// This extrinsic has a doughnut. Store it so that the doughnut is accessible
+			// This extrinsic has a valid doughnut. Store it so that the doughnut is accessible
 			// by the runtime during execution
 			storage::unhashed::put(well_known_keys::DOUGHNUT_KEY, &doughnut);
 		} else {
-			// Ensure doughnut state is empty
+			// No doughnut in extrinsic. Ensure current doughnut is empty
 			storage::unhashed::kill(well_known_keys::DOUGHNUT_KEY);
 		}
 
 		// Decode parameters and dispatch
 		let result = if let Some(doughnut) = xt.doughnut() {
-			// Doughnut needs to use issuer as origin
-			let issuer = System::AccountId::decode(&mut doughnut.issuer().as_ref()); // TODO: from/into would be better...
+			// Doughnut uses `issuer` as origin
+			let issuer = Some(doughnut.issuer());
 			let (f, _) = xt.deconstruct();
 			f.dispatch(issuer.into())
 		} else {

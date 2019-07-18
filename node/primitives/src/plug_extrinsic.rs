@@ -172,7 +172,7 @@ where
 		+ CurrentHeight<BlockNumber = BlockNumber>
 		+ BlockNumberToHash<BlockNumber = BlockNumber, Hash = Hash>,
 	Doughnut: Encode + DoughnutApi,
-	<Doughnut as DoughnutApi>::AccountId: AsRef<[u8]>,
+	<Doughnut as DoughnutApi>::PublicKey: AsRef<[u8]>,
 	<Doughnut as DoughnutApi>::Signature: AsRef<[u8]>,
 {
 	type Checked = CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;

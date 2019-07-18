@@ -244,6 +244,7 @@ pub mod doughnut {
 	//! Doughnut aware types for extrinsic tests
 	//!
 	use super::*;
+	use crate::doughnut::ValidationError;
 	use crate::traits::{DoughnutApi, Doughnuted};
 
 	/// A test account ID. Stores a `u64` as a byte array
@@ -353,14 +354,19 @@ pub mod doughnut {
 	}
 
 	impl DoughnutApi for DummyDoughnut {
-		type AccountId = TestAccountId;
+		type PublicKey = TestAccountId;
 		type Signature = Vec<u8>;
 		type Timestamp = ();
-		fn holder(&self) -> Self::AccountId { self.holder.clone() }
-		fn issuer(&self) -> Self::AccountId { self.issuer.clone() }
+		fn holder(&self) -> Self::PublicKey { self.holder.clone() }
+		fn issuer(&self) -> Self::PublicKey { self.issuer.clone() }
 		fn expiry(&self) -> Self::Timestamp { () }
+		fn not_before(&self) -> Self::Timestamp { () }
 		fn payload(&self) -> Vec<u8> { Default::default() }
 		fn signature(&self) -> Self::Signature { Default::default() }
+		fn signature_version(&self) -> u8 { 255 }
 		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
+		fn validate(&self, _who: Self::PublicKey, _now: Self::Timestamp) -> Result<(), ValidationError> {
+			Ok(())
+		}
 	}
 }

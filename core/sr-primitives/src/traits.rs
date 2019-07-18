@@ -31,7 +31,7 @@ use rstd::ops::{
 	Add, Sub, Mul, Div, Rem, AddAssign, SubAssign, MulAssign, DivAssign,
 	RemAssign, Shl, Shr
 };
-pub use doughnut::traits::DoughnutApi;
+pub use doughnut::traits::{DoughnutApi, DoughnutVerify};
 
 /// A lazy value.
 pub trait Lazy<T: ?Sized> {

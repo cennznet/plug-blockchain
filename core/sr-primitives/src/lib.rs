@@ -43,6 +43,7 @@ pub mod transaction_validity;
 pub mod doughnut {
 	//! Runtime doughnut types
 	pub use doughnut::v0::parity::DoughnutV0;
+	pub use doughnut::error::ValidationError;
 }
 
 /// A message indicating an invalid signature in extrinsic.
