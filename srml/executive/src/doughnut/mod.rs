@@ -138,7 +138,7 @@ where
 		// Verify that the signature is good.
 		let xt = uxt.check(&Default::default()).map_err(internal::ApplyError::BadSignature)?;
 
-		// TODO: Add appropriate errors
+		// TODO: Update with appropriate errors
 		if let Some(doughnut) = xt.doughnut() {
 			if let Some(sender) = xt.sender() {
 				// Check doughnut signature and validity
@@ -149,7 +149,7 @@ where
 								.map_err(|_| internal::ApplyError::BadSignature("doughnut validation"))?;
 			} else {
 				// If there's no signer then we shouldn't allow the doughnut to proceed
-				return Err(internal::ApplyError::BadSignature("no signer"));
+				return Err(internal::ApplyError::BadSignature("No signer"));
 			}
 		}
 
@@ -223,11 +223,11 @@ mod tests {
 	use balances::Call;
 	use runtime_io::with_externalities;
 	use substrate_primitives::{H256, Blake2Hasher};
-	use primitives::{ApplyError, BuildStorage};
+	use primitives::BuildStorage;
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Block, Digest, DigestItem, Header};
 	use primitives::testing::doughnut::{DummyDoughnut, TestAccountId, TestXt as DoughnutedTestXt};
-	use srml_support::{additional_traits::DispatchVerifier, assert_err, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::DispatchVerifier, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -282,6 +282,10 @@ mod tests {
 		type TransactionPayment = ();
 		type DustRemoval = ();
 		type TransferPayment = ();
+	}
+	impl timestamp::Trait for Runtime {
+		type Moment = u64;
+		type OnTimestampSet = ();
 	}
 
 	type TestXt = DoughnutedTestXt<Call<Runtime>, DummyDoughnut>;

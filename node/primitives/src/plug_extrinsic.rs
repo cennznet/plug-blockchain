@@ -1,41 +1,20 @@
 #[cfg(feature = "std")]
 use std::fmt;
 
+use crate::util::encode_with_vec_prefix;
 use rstd::prelude::*;
 use runtime_io::blake2_256;
 use runtime_primitives::codec::{Compact, Decode, Encode, Input};
 use runtime_primitives::generic::Era;
 use runtime_primitives::traits::{
-	self, BlockNumberToHash, Checkable, CurrentHeight, Doughnuted, Extrinsic, Lookup, MaybeDisplay,
-	Member, SimpleArithmetic, DoughnutApi,
+	self, BlockNumberToHash, Checkable, CurrentHeight, DoughnutApi, Doughnuted, Extrinsic, Lookup,
+	MaybeDisplay, Member, SimpleArithmetic,
 };
 
 const TRANSACTION_VERSION: u8 = 0b0000_00001;
 const MASK_VERSION: u8 = 0b0000_1111;
 const BIT_SIGNED: u8 = 0b1000_0000;
 const BIT_DOUGHNUT: u8 = 0b0100_0000;
-
-fn encode_with_vec_prefix<T: Encode, F: Fn(&mut Vec<u8>)>(encoder: F) -> Vec<u8> {
-	let size = ::rstd::mem::size_of::<T>();
-	let reserve = match size {
-		x if x <= 0b0011_1111 => 1,
-		x if x <= 0b0011_1111_1111_1111 => 2,
-		_ => 4,
-	};
-	let mut v = Vec::with_capacity(reserve + size);
-	v.resize(reserve, 0);
-	encoder(&mut v);
-
-	// need to prefix with the total length to ensure it's binary compatible with
-	// Vec<u8>.
-	let mut length: Vec<()> = Vec::new();
-	length.resize(v.len() - reserve, ());
-	length.using_encoded(|s| {
-		v.splice(0..reserve, s.iter().cloned());
-	});
-
-	v
-}
 
 /// A extrinsic right from the external world. This is unchecked and so
 /// can contain a signature.
@@ -79,7 +58,8 @@ where
 	}
 }
 
-impl<AccountId, Index, Call, Doughnut> traits::Applyable for CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>
+impl<AccountId, Index, Call, Doughnut> traits::Applyable
+	for CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>
 where
 	AccountId: Member + MaybeDisplay,
 	Index: Member + MaybeDisplay + SimpleArithmetic,
@@ -138,16 +118,16 @@ impl<AccountId, Address, Index, Call, Signature, Doughnut>
 	}
 }
 
-impl<AccountId: Encode, Address: Encode, Index: Encode, Call: Encode, Signature: Encode, Doughnut: Encode> Extrinsic
-	for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
+impl<AccountId: Encode, Address: Encode, Index: Encode, Call: Encode, Signature: Encode, Doughnut: Encode>
+	Extrinsic for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
 {
 	fn is_signed(&self) -> Option<bool> {
 		Some(self.signature.is_some())
 	}
 }
 
-impl<AccountId: Encode + Clone, Address, Index, Call, Signature: Encode + Clone, Doughnut> Doughnuted
-	for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
+impl<AccountId: Encode + Clone, Address, Index, Call, Signature: Encode + Clone, Doughnut>
+	Doughnuted for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
 where
 	Doughnut: Encode + Clone + DoughnutApi,
 {
@@ -157,8 +137,8 @@ where
 	}
 }
 
-impl<AccountId, Address, Index, Call, Signature, Context, Hash, BlockNumber, Doughnut> Checkable<Context>
-	for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
+impl<AccountId, Address, Index, Call, Signature, Context, Hash, BlockNumber, Doughnut>
+	Checkable<Context> for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
 where
 	Address: Member + MaybeDisplay,
 	Index: Member + MaybeDisplay + SimpleArithmetic,
@@ -171,9 +151,7 @@ where
 	Context: Lookup<Source = Address, Target = AccountId>
 		+ CurrentHeight<BlockNumber = BlockNumber>
 		+ BlockNumberToHash<BlockNumber = BlockNumber, Hash = Hash>,
-	Doughnut: Encode + DoughnutApi,
-	<Doughnut as DoughnutApi>::PublicKey: AsRef<[u8]>,
-	<Doughnut as DoughnutApi>::Signature: AsRef<[u8]>,
+	Doughnut: Encode,
 {
 	type Checked = CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;
 
@@ -300,8 +278,14 @@ where
 }
 
 #[cfg(feature = "std")]
-impl<AccountId: Encode, Address: Encode, Index, Signature: Encode, Call: Encode, Doughnut: Encode> serde::Serialize
-	for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
+impl<
+		AccountId: Encode,
+		Address: Encode,
+		Index,
+		Signature: Encode,
+		Call: Encode,
+		Doughnut: Encode,
+	> serde::Serialize for PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>
 where
 	Compact<Index>: Encode,
 {

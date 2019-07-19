@@ -18,7 +18,7 @@
 //! The DispatchVerifier impl for this runtime permission domain
 //!
 use crate::Runtime;
-use node_primitives::Doughnut;
+use node_primitives::PlugDoughnut as Doughnut;
 use support::additional_traits::DispatchVerifier;
 
 impl DispatchVerifier<Doughnut> for Runtime {

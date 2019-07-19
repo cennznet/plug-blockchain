@@ -31,7 +31,7 @@ use council::seats as council_seats;
 use council::{motions as council_motions, voting as council_voting};
 use grandpa::fg_primitives::{self, ScheduledChange};
 use node_primitives::{
-	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, Doughnut,
+	AccountId, AccountIndex, AuthorityId, AuthoritySignature, Balance, BlockNumber, PlugDoughnut as Doughnut,
 	Hash, Index, Signature, plug_extrinsic,
 };
 use rstd::prelude::*;

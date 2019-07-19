@@ -25,11 +25,11 @@ pub type BlockImportForService<F> = crate::GrandpaBlockImport<
 	<F as ServiceFactory>::Block,
 	<F as ServiceFactory>::RuntimeApi,
 	client::Client<
-        FullBackend<F>,
-        FullExecutor<F>,
-        <F as ServiceFactory>::Block,
-        <F as ServiceFactory>::RuntimeApi
-    >,
+		FullBackend<F>,
+		FullExecutor<F>,
+		<F as ServiceFactory>::Block,
+		<F as ServiceFactory>::RuntimeApi
+	>,
 >;
 
 pub type LinkHalfForService<F> = crate::LinkHalf<
