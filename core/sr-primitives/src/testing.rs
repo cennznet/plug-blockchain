@@ -244,7 +244,6 @@ pub mod doughnut {
 	//! Doughnut aware types for extrinsic tests
 	//!
 	use super::*;
-	use crate::doughnut::ValidationError;
 	use crate::traits::{DoughnutApi, DoughnutVerify, Doughnuted};
 
 	/// A test account ID. Stores a `u64` as a byte array
@@ -365,9 +364,6 @@ pub mod doughnut {
 		fn signature(&self) -> Self::Signature { Default::default() }
 		fn signature_version(&self) -> u8 { 255 }
 		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
-		fn validate(&self, _who: &Self::PublicKey, _now: Self::Timestamp) -> Result<(), ValidationError> {
-			Ok(())
-		}
 	}
 
 	impl DoughnutVerify for DummyDoughnut {

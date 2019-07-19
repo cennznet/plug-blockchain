@@ -227,7 +227,7 @@ mod tests {
 	use primitives::traits::{Header as HeaderT, BlakeTwo256, IdentityLookup};
 	use primitives::testing::{Block, Digest, DigestItem, Header};
 	use primitives::testing::doughnut::{DummyDoughnut, TestAccountId, TestXt as DoughnutedTestXt};
-	use srml_support::{additional_traits::DispatchVerifier, traits::Currency, impl_outer_origin, impl_outer_event};
+	use srml_support::{additional_traits::DispatchVerifier, assert_err, traits::Currency, impl_outer_origin, impl_outer_event};
 	use system;
 	use hex_literal::hex;
 
@@ -473,4 +473,23 @@ mod tests {
 			assert_eq!(<balances::Module<Runtime>>::total_balance(&charlie), 30);
 		});
 	}
+
+	#[test]
+	fn it_fails_when_xt_sender_and_doughnut_holder_are_mismatched() {
+		let alice = TestAccountId::new(1);
+		let bob = TestAccountId::new(2);
+		let doughnut = DummyDoughnut {
+			issuer: alice.clone(),
+			holder: bob.clone(),
+		};
+		// signer id `3`/charlie != holder id `2`/bob
+		let xt = DoughnutedTestXt::new(Some(3), 0, Call::transfer(bob.clone(), 30), Some(doughnut.clone()));
+
+		let mut t = new_test_ext();
+		with_externalities(&mut t, || {
+			Executive::initialize_block(&Header::new(1, H256::default(), H256::default(), [69u8; 32].into(), Digest::default()));
+			assert_err!(Executive::apply_extrinsic(xt), ApplyError::BadSignature);
+		});
+	}
+
 }

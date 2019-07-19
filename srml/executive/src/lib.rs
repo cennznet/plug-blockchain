@@ -424,19 +424,8 @@ mod tests {
 		type TransferPayment = ();
 	}
 
-	impl ChargeExtrinsicFee<<Self as system::Trait>::AccountId, TestXt> for Runtime {
-		// A dummy impl for test extrinsic and account id types
-		fn charge_extrinsic_fee<'a>(
-			_transactor: &<Self as system::Trait>::AccountId,
-			_encoded_len: usize,
-			_extrinsic: &'a TestXt,
-		) -> Result<(), &'static str> {
-			Ok(())
-		}
-	}
-
 	type TestXt = primitives::testing::TestXt<Call<Runtime>>;
-	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, Runtime, ()>;
+	type Executive = super::Executive<Runtime, Block<TestXt>, system::ChainContext<Runtime>, balances::Module<Runtime>, ()>;
 
 	#[test]
 	fn balance_transfer_dispatch_works() {
