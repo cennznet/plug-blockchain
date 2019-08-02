@@ -939,8 +939,8 @@ impl<T: Trait> Module<T> {
 				Self::reward_validator(v, reward);
 			}
 			Self::deposit_event(RawEvent::Reward(reward));
-			let total_minted = reward * <BalanceOf<T> as As<usize>>::sa(validators.len());
-			let total_rewarded_stake = Self::slot_stake() * <BalanceOf<T> as As<usize>>::sa(validators.len());
+			let total_minted = reward * <BalanceOf<T> as As<u64>>::sa(validators.len() as u64);
+			let total_rewarded_stake = Self::slot_stake() * <BalanceOf<T> as As<u64>>::sa(validators.len() as u64);
 			T::OnRewardMinted::on_dilution(total_minted, total_rewarded_stake);
 		}
 
