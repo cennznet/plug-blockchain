@@ -88,9 +88,6 @@ use sr_primitives::{ApplyOutcome, ApplyError};
 use sr_primitives::transaction_validity::TransactionValidity;
 use sr_primitives::weights::GetDispatchInfo;
 
-mod doughnut;
-pub use doughnut::DoughnutExecutive;
-
 mod internal {
 	use sr_primitives::traits::DispatchError;
 
@@ -367,7 +364,6 @@ mod tests {
 	use sr_primitives::testing::{Digest, Header, Block};
 	use srml_support::{impl_outer_event, impl_outer_origin, parameter_types};
 	use srml_support::traits::{Currency, LockIdentifier, LockableCurrency, WithdrawReasons, WithdrawReason};
-	use srml_support::additional_traits::DispatchVerifier;
 	use system;
 	use hex_literal::hex;
 
@@ -379,19 +375,6 @@ mod tests {
 	impl_outer_event!{
 		pub enum MetaEvent for Runtime {
 			balances<T>,
-		}
-	}
-
-	pub struct DummyDispatchVerifier;
-
-	impl DispatchVerifier<DummyDoughnut> for DummyDispatchVerifier {
-		const DOMAIN: &'static str = "test";
-		fn verify(
-			_doughnut: &DummyDoughnut,
-			_module: &str,
-			_method: &str,
-		) -> Result<(), &'static str> {
-			Ok(())
 		}
 	}
 
@@ -415,8 +398,8 @@ mod tests {
 		type Header = Header;
 		type Event = MetaEvent;
 		type BlockHashCount = BlockHashCount;
-		type Doughnut = DummyDoughnut;
-		type DispatchVerifier = DummyDispatchVerifier;
+		type Doughnut = ();
+		type DispatchVerifier = ();
 		type WeightMultiplierUpdate = ();
 		type MaximumBlockWeight = MaximumBlockWeight;
 		type AvailableBlockRatio = AvailableBlockRatio;
