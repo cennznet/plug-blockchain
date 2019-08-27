@@ -1053,17 +1053,18 @@ macro_rules! decl_module {
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
-						use $crate::dispatch::DispatchVerifier;
-						// Check if a doughnut exists in this execution context and whether it grants permission to
-						// dispatch the call.
-						// TODO: Use the constant key
-						if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
-							let _ = <T as $system::Trait>::DispatchVerifier::verify(
-								&doughnut,
-								env!("CARGO_PKG_NAME"), // module
-								stringify!($fn_name),   // method
-							)?;
-						}
+						// TODO: substrate 2.0 update - fix doughnut stuff
+						// use $crate::dispatch::DispatchVerifier;
+						// // Check if a doughnut exists in this execution context and whether it grants permission to
+						// // dispatch the call.
+						// // TODO: Use the constant key
+						// if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
+						// 	let _ = <T as $system::Trait>::DispatchVerifier::verify(
+						// 		&doughnut,
+						// 		env!("CARGO_PKG_NAME"), // module
+						// 		stringify!($fn_name),   // method
+						// 	)?;
+						// }
 
 						$( $impl )*
 					}
