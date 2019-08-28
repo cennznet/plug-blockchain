@@ -9,8 +9,8 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-            - v1-cargo-global-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/RUST_VERSION" }}
-            - v1-cargo-global-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-
+            - v2-cargo-global-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-{{ checksum ".circleci/RUST_VERSION" }}
+            - v2-cargo-global-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-
       - run:
           name: Install rust
           command: |
