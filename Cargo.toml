@@ -112,3 +112,7 @@ maintenance = { status = "actively-developed" }
 [profile.release]
 # Substrate runtime requires unwinding.
 panic = "unwind"
+
+[profile.test]
+lto = false
+
