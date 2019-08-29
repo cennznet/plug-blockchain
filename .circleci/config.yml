@@ -48,7 +48,11 @@ commands:
       - save_cache:
           name: Save target cache
           paths:
-            - /home/circleci/.cargo
+            - target/debug/.fingerprint
+            - target/debug/build
+            - target/debug/deps
+            - target/debug/incremental
+            - runtime/wasm/target/
           key: target-cache-{{ arch }}-{{ checksum ".circleci/RUST_VERSION" }}-{{ .Environment.CIRCLE_BRANCH }}-{{ epoch }}
   restore-target-cache:
     steps:
