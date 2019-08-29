@@ -17,6 +17,9 @@ sr-staking-primitives = { path = "../../core/sr-staking-primitives", default-fea
 srml-support = { path = "../support", default-features = false }
 system = { package = "srml-system", path = "../system", default-features = false }
 
+[dev-dependencies]
+session = { package = "srml-session", path = "../session", features = ["historical"] }
+
 [features]
 default = ["std", "session/historical"]
 std = [
