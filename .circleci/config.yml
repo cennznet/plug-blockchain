@@ -71,10 +71,10 @@ jobs:
       - restore-cache
       - restore-target-cache
       - run:
-          name: Build binary
+          name: Build
           command: |
-            cargo build
-          no_output_timeout: 40m
+            cargo check
+          no_output_timeout: 30m
       - save-cache
       - save-target-cache
       - run:
