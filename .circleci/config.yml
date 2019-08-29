@@ -58,7 +58,7 @@ commands:
     steps:
       - restore_cache:
           name: Restore target cache
-          key: target-cache-{{ arch }}-{{ checksum ".circleci/RUST_VERSION" }}-{{ .Environment.CIRCLE_BRANCH }}-{{ epoch }}
+          key: target-cache-{{ arch }}-{{ checksum ".circleci/RUST_VERSION" }}-{{ .Environment.CIRCLE_BRANCH }}
 jobs:
   build:
     machine:
