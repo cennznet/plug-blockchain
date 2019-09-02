@@ -15,10 +15,6 @@ macro_rules! reserved {
 					pub fn ensure_root<R>(_: R) -> Result {
 						Ok(())
 					}
-
-					pub trait Trait {
-						type DispatchVerifier: srml_support::additional_traits::DispatchVerifier<()>;
-					}
 				}
 
 				srml_support::decl_module! {
@@ -33,5 +29,4 @@ macro_rules! reserved {
 
 reserved!(on_finalize on_initialize on_finalise on_initialise offchain_worker deposit_event);
 
-fn main() {
-}
+fn main() {}
