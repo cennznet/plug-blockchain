@@ -84,7 +84,7 @@ jobs:
       - run:
           name: Run srml tests
           command: |
-            export CARGO_TARGET_DIR: "~/project/target"
+            export CARGO_TARGET_DIR="~/project/target"
             for p in $(find srml -name Cargo.toml | sort -u | sed 's/Cargo.toml//g'); do
               pushd $p > /dev/null
               echo "testing $p"
@@ -96,7 +96,7 @@ jobs:
       - run:
           name: Run node tests
           command: |
-            export CARGO_TARGET_DIR: "~/project/target"
+            export CARGO_TARGET_DIR="~/project/target"
             for p in $(find node -name Cargo.toml | sort -u | sed 's/Cargo.toml//g'); do
               pushd $p > /dev/null
               echo "testing $p"
@@ -108,7 +108,7 @@ jobs:
       - run:
           name: Run core tests
           command: |
-            export CARGO_TARGET_DIR: "~/project/target"
+            export CARGO_TARGET_DIR="~/project/target"
             for p in $(find core -name Cargo.toml | sort -u | sed 's/Cargo.toml//g'); do
               pushd $p > /dev/null
               echo "testing $p"
@@ -120,7 +120,7 @@ jobs:
       - run:
           name: Run node-template tests
           command: |
-            export CARGO_TARGET_DIR: "~/project/target"
+            export CARGO_TARGET_DIR="~/project/target"
             for p in $(find node-template -name Cargo.toml | sort -u | sed 's/Cargo.toml//g'); do
               pushd $p > /dev/null
               echo "testing $p"
@@ -132,7 +132,7 @@ jobs:
       - run:
           name: Run subkey tests
           command: |
-            export CARGO_TARGET_DIR: "~/project/target"
+            export CARGO_TARGET_DIR="~/project/target"
             for p in $(find subkey -name Cargo.toml | sort -u | sed 's/Cargo.toml//g'); do
               pushd $p > /dev/null
               cargo test
