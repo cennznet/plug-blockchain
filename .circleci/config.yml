@@ -68,7 +68,7 @@ jobs:
       RUST_VERSION: nightly-2019-07-14
       RUSTC_WRAPPER: sccache
       SCCACHE_CACHE_SIZE: 10G
-      CARGO_TARGET_DIR: {{ .Environment.CIRCLE_WORKING_DIRECTORY }}/target
+      CARGO_TARGET_DIR: "$CIRCLE_WORKING_DIRECTORY/target"
     steps:
       - checkout
       - install-rust
