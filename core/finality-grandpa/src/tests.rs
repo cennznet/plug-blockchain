@@ -151,7 +151,7 @@ impl MessageRouting {
 }
 
 impl Network<Block> for MessageRouting {
-	type In = Box<Stream<Item=network_gossip::TopicNotification, Error=()> + Send>;
+	type In = Box<dyn Stream<Item=network_gossip::TopicNotification, Error=()> + Send>;
 
 	/// Get a stream of messages for a specific gossip topic.
 	fn messages_for(&self, topic: Hash) -> Self::In {
@@ -385,7 +385,7 @@ fn run_to_completion_with<F>(
 	peers: &[AuthorityKeyring],
 	with: F,
 ) -> u64 where
-	F: FnOnce(current_thread::Handle) -> Option<Box<Future<Item=(),Error=()>>>
+	F: FnOnce(current_thread::Handle) -> Option<Box<dyn Future<Item=(),Error=()>>>
 {
 	use parking_lot::RwLock;
 
@@ -462,7 +462,7 @@ fn run_to_completion_with<F>(
 		.map(|_| ())
 		.map_err(|_| ());
 
-	runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
+	let _ = runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
 
 	let highest_finalized = *highest_finalized.read();
 	highest_finalized
@@ -556,7 +556,7 @@ fn finalize_3_voters_1_full_observer() {
 		.map(|_| ())
 		.map_err(|_| ());
 
-	runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
+	let _ = runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
 }
 
 #[test]
@@ -725,7 +725,7 @@ fn transition_3_voters_twice_1_full_observer() {
 		.map(|_| ())
 		.map_err(|_| ());
 
-	runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
+	let _ = runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
 }
 
 #[test]
@@ -1250,7 +1250,7 @@ fn voter_persists_its_votes() {
 
 	let exit = exit_rx.into_future().map(|_| ()).map_err(|_| ());
 
-	runtime.block_on(drive_to_completion.select(exit).map(|_| ()).map_err(|_| ())).unwrap();
+	let _ = runtime.block_on(drive_to_completion.select(exit).map(|_| ()).map_err(|_| ())).unwrap();
 }
 
 #[test]

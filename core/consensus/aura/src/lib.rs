@@ -53,7 +53,7 @@ use inherents::{InherentDataProviders, InherentData, RuntimeString};
 use authorities::AuthoritiesApi;
 
 use futures::{Future, IntoFuture, future, stream::Stream};
-use tokio::timer::Timeout;
+use tokio_timer::Timeout;
 use log::{warn, debug, info, trace};
 
 use srml_aura::{
@@ -960,7 +960,7 @@ mod tests {
 			.map(|_| ())
 			.map_err(|_| ());
 
-		runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
+		let _ = runtime.block_on(wait_for.select(drive_to_completion).map_err(|_| ())).unwrap();
 	}
 
 	#[test]
