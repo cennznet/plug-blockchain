@@ -21,14 +21,12 @@ use crate::types::{AccountId, Timestamp, Signature};
 use crate::util::encode_with_vec_prefix;
 use primitives::{
 	crypto::UncheckedFrom,
-	H256,
-	sr25519::Signature as Sr25519Sig,
+	sr25519::{self},
 };
-use primitives::ed25519::{Public as Ed25519Pub, Signature as Ed25519Sig};
+use primitives::ed25519::{self};
 
-use runtime_primitives::doughnut::{DoughnutV0, ValidationError};
-use runtime_primitives::traits::{DoughnutApi};
-use runtime_primitives::traits::{DoughnutVerify, Verify};
+use sr_primitives::doughnut::{DoughnutV0};
+use sr_primitives::traits::{DoughnutApi, DoughnutVerify, Verify};
 
 /// A doughnut compatible with the plug runtime
 /// It handles type conversion from DoughnutV0 types into plug runtime types e.g. `PublicKey` -> `AccountId`
@@ -87,7 +85,7 @@ impl DoughnutApi for PlugDoughnut {
 	}
 	/// Return the doughnut signature
 	fn signature(&self) -> Self::Signature {
-		Sr25519Sig::from_slice(self.0.signature().as_ref()).into()
+		sr25519::Signature(self.0.signature()).into()
 	}
 	fn signature_version(&self) -> u8 {
 		self.0.signature_version()
@@ -95,11 +93,6 @@ impl DoughnutApi for PlugDoughnut {
 	/// Return the payload for domain, if it exists in the doughnut
 	fn get_domain(&self, domain: &str) -> Option<&[u8]> {
 		self.0.get_domain(domain)
-	}
-	/// Validate the doughnut against `who` and the current timestamp `now`
-	fn validate(&self, who: &Self::PublicKey, now: Self::Timestamp) -> Result<(), ValidationError> {
-		let _who: H256 = AsRef::<[u8; 32]>::as_ref(who).into();
-		self.0.validate(&_who, now as u32)
 	}
 }
 
@@ -116,9 +109,9 @@ where
 				self.signature().verify(&self.payload()[..], &self.issuer())
 			}
 			1 => {
-				let signature = Ed25519Sig::from_slice(self.0.signature().as_ref());
-				let issuer = Ed25519Pub::from_h256(self.0.issuer());
-				Ed25519Sig::verify(&signature, &self.payload()[..], &issuer)
+				let signature = ed25519::Signature(self.0.signature().into());
+				let issuer = ed25519::Public(self.0.issuer().into());
+				ed25519::Signature::verify(&signature, &self.payload()[..], &issuer)
 			}
 			_ => {
 				// Unsupported

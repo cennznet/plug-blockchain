@@ -4,9 +4,9 @@ use std::fmt;
 use crate::util::encode_with_vec_prefix;
 use rstd::prelude::*;
 use runtime_io::blake2_256;
-use runtime_primitives::codec::{Compact, Decode, Encode, Input};
-use runtime_primitives::generic::Era;
-use runtime_primitives::traits::{
+use sr_primitives::codec::{Compact, Decode, Encode, Input};
+use sr_primitives::generic::Era;
+use sr_primitives::traits::{
 	self, BlockNumberToHash, Checkable, CurrentHeight, DoughnutApi, Doughnuted, Extrinsic, Lookup,
 	MaybeDisplay, Member, SimpleArithmetic,
 };
