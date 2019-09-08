@@ -18,6 +18,7 @@
 //! A doughnut enabled executive impl
 //!
 use rstd::prelude::*;
+use rstd::convert::TryInto;
 use rstd::marker::PhantomData;
 use rstd::result;
 use primitives::traits::{
@@ -71,6 +72,8 @@ where
 	<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call: Dispatchable,
 	<<<Block::Extrinsic as Checkable<Context>>::Checked as Applyable>::Call as Dispatchable>::Origin: From<Option<System::AccountId>>,
 	Doughnut<Block, Context>: DoughnutVerify + DoughnutApi<PublicKey=System::AccountId, Timestamp=System::Moment>,
+	System::AccountId: AsRef<[u8]>,
+	System::Moment: TryInto<u32>,
 {
 	/// Start the execution of a particular block.
 	pub fn initialize_block(header: &System::Header) {
