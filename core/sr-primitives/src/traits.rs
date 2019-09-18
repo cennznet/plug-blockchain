@@ -34,7 +34,7 @@ use rstd::ops::{
 	Add, Sub, Mul, Div, Rem, AddAssign, SubAssign, MulAssign, DivAssign,
 	RemAssign, Shl, Shr
 };
-pub use doughnut::traits::DoughnutApi;
+pub use doughnut::traits::{DoughnutApi, DoughnutVerify};
 use crate::AppKey;
 
 /// A lazy value.
@@ -447,6 +447,38 @@ macro_rules! tuple_impl {
 
 #[allow(non_snake_case)]
 tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,);
+
+// Blanket impl for `Option<T: SignedExtension>`
+impl<T, AccountId> SignedExtension for Option<T>
+where
+  T: SignedExtension<AccountId=AccountId>,
+{
+  type AccountId = AccountId;
+  type AdditionalSigned = ();
+  type Call = T::Call;
+  type Pre = T::Pre;
+  fn additional_signed(&self) -> rstd::result::Result<Self::AdditionalSigned, &'static str> { 
+    Ok(())
+  }
+  fn validate(&self, who: &Self::AccountId, call: &Self::Call, info: DispatchInfo, len: usize) -> Result<ValidTransaction, DispatchError> {
+    if let Some(inner) = self {
+      return inner.validate(who, call, info, len)
+    }
+    Ok(ValidTransaction::default())
+  }
+}
+
+/// A `SignedExtra` payload which my contain a doughnut delegation proof among it's values.
+/// This trait allows the doughnut value to be freely extracted from an extrinsic's `SignedExtension` payload.
+/// This is not possible with the `SignedExtension` trait alone, since the fields are indistinguishable
+/// from each other and are only decoded in pre-set hooks (`pre_dispatch`, `validate`, etc.), where as the doughnut is
+/// required in other places outside these hooks, such as `Applyable::dispatch`.  
+pub trait DoughnutExtra {
+  /// The extension doughnut type
+  type Doughnut: Send + Sync;
+  /// Return the doughnut from the `SignedExtension` payload, if any
+  fn doughnut(self) -> Option<Self::Doughnut>;
+}
 
 /// Abstraction around hashing
 pub trait Hash: 'static + MaybeSerializeDebug + Clone + Eq + PartialEq {	// Stupid bug in the Rust compiler believes derived
@@ -1011,6 +1043,16 @@ macro_rules! tuple_impl_indexed {
 			}
 		}
 
+    impl<
+      AccountId,
+      Doughnut: SignedExtension<AccountId=AccountId>,
+      $($direct: SignedExtension<AccountId=AccountId>),+
+    > DoughnutExtra for (Option<Doughnut>, $($direct),+,) {
+      type Doughnut = Doughnut;
+      fn doughnut(self) -> Option<Self::Doughnut> {
+        self.0
+      }
+    }
 	};
 	([$($direct:ident)+] [] ; [$($index:tt,)+] []) => {
 		tuple_impl_indexed!([$($direct)+] ; [$($index,)+]);

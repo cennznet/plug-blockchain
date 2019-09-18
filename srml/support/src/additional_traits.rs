@@ -46,11 +46,14 @@ impl<T, U> ChargeFee<T> for DummyChargeFee<T, U> {
 	fn refund_fee(_: &T, _: Self::Amount) -> Result<(), &'static str> { Ok(()) }
 }
 
-/// A type which can verify dispatch permissions for a specific domain
+/// A type which can verify a doughnut delegation proof in order to dispatch a module/method call
+/// into the runtime
+/// The `verify()` hook is injected into every module/method on the runtime.
+/// When a doughnut proof is included along with a transaction, `verify` will be invoked just before executing method logic.
 pub trait DispatchVerifier<Doughnut> {
-	/// The doughnut permission domain it can verify
+	/// The doughnut permission domain it verifies
 	const DOMAIN: &'static str;
-	/// Check the given doughnut authorizes a dispatched call to `module` and `method` for this domain
+	/// Check the doughnut authorizes a dispatched call to `module` and `method` for this domain
 	fn verify(
 		doughnut: &Doughnut,
 		module: &str,
@@ -61,7 +64,7 @@ pub trait DispatchVerifier<Doughnut> {
 /// A dummy implementation which should just fail
 impl<Doughnut> DispatchVerifier<Doughnut> for () {
 	const DOMAIN: &'static str = "";
-	fn verify(_: &Doughnut, _: &str, _: &str) ->  Result<(), &'static str> {
+	fn verify(_: &Doughnut, _: &str, _: &str) -> Result<(), &'static str> {
 		Err("Doughnut dispatch verification is not implemented for this domain")
 	}
 }

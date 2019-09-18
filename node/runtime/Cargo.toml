@@ -45,6 +45,7 @@ rustc-hex = { version = "2.0", optional = true }
 serde = { version = "1.0", optional = true }
 substrate-keyring = { path = "../../core/keyring", optional = true }
 substrate-session = { path = "../../core/session", default-features = false }
+prml-doughnut = { path = "../../prml/doughnut", default-features = false }
 
 [build-dependencies]
 wasm-builder-runner = { package = "substrate-wasm-builder-runner", version = "1.0.2", path = "../../core/utils/wasm-builder-runner" }
@@ -77,6 +78,7 @@ std = [
 	"offchain-primitives/std",
 	"offences/std",
 	"primitives/std",
+  "prml-doughnut/std",
 	"rstd/std",
 	"rustc-hex",
 	"safe-mix/std",

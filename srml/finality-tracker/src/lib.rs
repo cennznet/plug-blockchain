@@ -28,6 +28,9 @@ use rstd::{prelude::*, result, cmp, vec};
 use codec::Decode;
 use srml_support::{decl_module, decl_storage, for_each_tuple};
 use srml_support::traits::Get;
+// The `self` import is required for the `DispatchVerifier` macro expansion
+// see `srml/support/src/dispatch.rs`
+#[allow(unused_imports)]
 use srml_system::{self as system, ensure_none, Trait as SystemTrait};
 
 #[cfg(feature = "std")]

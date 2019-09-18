@@ -471,14 +471,16 @@ pub mod doughnut {
 	}
 
 	impl DoughnutApi for DummyDoughnut {
-		type AccountId = TestAccountId;
+		type PublicKey = TestAccountId;
 		type Signature = Vec<u8>;
-		type Timestamp = ();
-		fn holder(&self) -> Self::AccountId { self.holder.clone() }
-		fn issuer(&self) -> Self::AccountId { self.issuer.clone() }
-		fn expiry(&self) -> Self::Timestamp { () }
+		type Timestamp = u32;
+		fn holder(&self) -> Self::PublicKey { self.holder.clone() }
+		fn issuer(&self) -> Self::PublicKey { self.issuer.clone() }
+		fn expiry(&self) -> Self::Timestamp { u32::max_value() }
+    fn not_before(&self) -> Self::Timestamp { u32::min_value() }
 		fn payload(&self) -> Vec<u8> { Default::default() }
 		fn signature(&self) -> Self::Signature { Default::default() }
+    fn signature_version(&self) -> u8 { 255 }
 		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
 	}
 }

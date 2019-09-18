@@ -58,7 +58,6 @@ pub use sr_primitives::{Permill, Perbill};
 pub use support::StorageValue;
 pub use staking::StakerStatus;
 
-mod doughnut;
 /// Implementations of some helper traits passed into runtime modules as associated types.
 pub mod impls;
 use impls::{CurrencyToVoteHandler, WeightMultiplierUpdateHandler, Author, WeightToFee};
@@ -124,13 +123,15 @@ impl system::Trait for Runtime {
 	type WeightMultiplierUpdate = WeightMultiplierUpdateHandler;
 	type Event = Event;
 	type BlockHashCount = BlockHashCount;
-	type Doughnut = ();
-	type DispatchVerifier = ();
+	type Doughnut = Doughnut;
+	type DispatchVerifier = prml_doughnut::PlugDoughnutDispatcher<Runtime>;
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type Version = Version;
 }
+
+impl prml_doughnut::DoughnutRuntime for Runtime {}
 
 parameter_types! {
 	pub const EpochDuration: u64 = EPOCH_DURATION_IN_SLOTS;
@@ -470,6 +471,7 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 /// The SignedExtension to the basic transaction logic.
 pub type SignedExtra = (
+	Option<prml_doughnut::PlugDoughnut<Runtime>>,
 	system::CheckVersion<Runtime>,
 	system::CheckGenesis<Runtime>,
 	system::CheckEra<Runtime>,
@@ -477,13 +479,6 @@ pub type SignedExtra = (
 	system::CheckWeight<Runtime>,
 	balances::TakeFees<Runtime>
 );
-
-// TODO: substrate 2.0 update - use plug extrinsic
-// /// Unchecked extrinsic type as expected by this runtime.
-// pub type UncheckedExtrinsic =
-// 	plug_extrinsic::PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>;
-// /// Extrinsic type that has already been checked.
-// pub type CheckedExtrinsic = plug_extrinsic::CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;
 
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
