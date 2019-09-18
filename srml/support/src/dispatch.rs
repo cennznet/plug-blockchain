@@ -1053,11 +1053,10 @@ macro_rules! decl_module {
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
-						// TODO: substrate 2.0 update - fix doughnut stuff
-						// use $crate::dispatch::DispatchVerifier;
-						// // Check if a doughnut exists in this execution context and whether it grants permission to
-						// // dispatch the call.
-						// // TODO: Use the constant key
+						use $crate::dispatch::DispatchVerifier;
+						// Check if a doughnut exists in this execution context and whether it grants permission to
+						// dispatch the call.
+						// TODO: match over origin instead
 						// if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
 						// 	let _ = <T as $system::Trait>::DispatchVerifier::verify(
 						// 		&doughnut,

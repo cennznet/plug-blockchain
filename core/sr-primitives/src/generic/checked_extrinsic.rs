@@ -20,7 +20,7 @@
 use rstd::result::Result;
 use crate::traits::{
 	self, Member, MaybeDisplay, SignedExtension, DispatchError, Dispatchable, DispatchResult,
-	ValidateUnsigned
+	DoughnutExtra, ValidateUnsigned
 };
 use crate::weights::{GetDispatchInfo, DispatchInfo};
 use crate::transaction_validity::TransactionValidity;
@@ -39,14 +39,15 @@ pub struct CheckedExtrinsic<AccountId, Call, Extra> {
 	pub function: Call,
 }
 
-impl<AccountId, Call, Extra, Origin> traits::Applyable
+impl<AccountId, Call, Extra, Origin, Doughnut> traits::Applyable
 for
 	CheckedExtrinsic<AccountId, Call, Extra>
 where
 	AccountId: Member + MaybeDisplay,
 	Call: Member + Dispatchable<Origin=Origin>,
-	Extra: SignedExtension<AccountId=AccountId, Call=Call>,
+	Extra: SignedExtension<AccountId=AccountId, Call=Call> + DoughnutExtra<Doughnut=Doughnut>,
 	Origin: From<Option<AccountId>>,
+	Doughnut: Send + Sync,
 {
 	type AccountId = AccountId;
 	type Call = Call;
@@ -77,13 +78,15 @@ where
 		info: DispatchInfo,
 		len: usize,
 	) -> Result<DispatchResult, DispatchError> {
-		let (maybe_who, pre) = if let Some((id, extra)) = self.signed {
-			let pre = Extra::pre_dispatch(extra, &id, &self.function, info, len)?;
-			(Some(id), pre)
+		// TODO: Convert origin type
+		let (maybe_who, _maybe_doughnut, pre) = if let Some((id, extra)) = self.signed {
+			let pre = Extra::pre_dispatch(extra.clone(), &id, &self.function, info, len)?;
+			(Some(id), extra.doughnut(), pre)
 		} else {
 			let pre = Extra::pre_dispatch_unsigned(&self.function, info, len)?;
-			(None, pre)
+			(None, None, pre)
 		};
+
 		let res = self.function.dispatch(Origin::from(maybe_who));
 		Extra::post_dispatch(pre, info, len);
 		Ok(res)
