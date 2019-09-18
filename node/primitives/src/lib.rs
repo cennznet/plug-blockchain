@@ -24,10 +24,6 @@ use sr_primitives::{
 	generic, doughnut, traits::{Verify, BlakeTwo256}, OpaqueExtrinsic, AnySignature
 };
 
-// TODO: substrate 2.0 update - refactor plug extrinsic
-// /// The plug extrinsic type definition and impls
-// pub mod plug_extrinsic;
-
 /// An index to a block.
 pub type BlockNumber = u32;
 
