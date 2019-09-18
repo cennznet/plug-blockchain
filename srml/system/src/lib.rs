@@ -106,7 +106,6 @@ use sr_primitives::transaction_validity::{
 use sr_primitives::traits::{self, CheckEqual, SimpleArithmetic, Zero, SignedExtension, Convert,
 	SimpleBitOps, Hash, Member, MaybeDisplay, EnsureOrigin, DispatchError, SaturatedConversion,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup, One, Bounded, Lookup,
-	DoughnutApi,
 };
 use primitives::storage::well_known_keys;
 use srml_support::{
@@ -172,7 +171,7 @@ pub fn extrinsics_data_root<H: Hash>(xts: Vec<Vec<u8>>) -> H::Output {
 
 pub trait Trait: 'static + Eq + Clone {
 	/// The aggregated `Origin` type used by dispatchable calls.
-	type Origin: Into<Result<RawOrigin<Self::AccountId>, Self::Origin>> + From<RawOrigin<Self::AccountId>>;
+	type Origin: Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>> + From<RawOrigin<Self::AccountId, Self::Doughnut>>;
 
 	/// The aggregated `Call` type.
 	type Call;
@@ -226,7 +225,7 @@ pub trait Trait: 'static + Eq + Clone {
 	type BlockHashCount: Get<Self::BlockNumber>;
 
 	/// The runtime doughnut type
-	type Doughnut: Parameter + Member + DoughnutApi;
+	type Doughnut: Parameter + Member;
 
 	/// A type which verifies a doughnut to dispatch a runtime call
 	type DispatchVerifier: DispatchVerifierT<Self::Doughnut>;
@@ -340,28 +339,35 @@ decl_event!(
 /// Origin for the System module.
 #[derive(PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "std", derive(Debug))]
-pub enum RawOrigin<AccountId> {
+pub enum RawOrigin<AccountId, Doughnut> {
 	/// The system itself ordained this dispatch to happen: this is the highest privilege level.
 	Root,
 	/// It is signed by some public key and we provide the `AccountId`.
 	Signed(AccountId),
+	/// It is signed by some public key and we provide the `AccountId`.
+	/// It also has an attached doughnut delegation proof
+	/// The runtime will allow `AccountId` to act with delegated authority
+	/// on behalf of the Doughnut issuer, as set out in the Doughnut's contract.
+	Delegated(AccountId, Doughnut),
 	/// It is signed by nobody, can be either:
 	/// * included and agreed upon by the validators anyway,
 	/// * or unsigned transaction validated by a module.
 	None,
 }
 
-impl<AccountId> From<Option<AccountId>> for RawOrigin<AccountId> {
-	fn from(s: Option<AccountId>) -> RawOrigin<AccountId> {
-		match s {
-			Some(who) => RawOrigin::Signed(who),
-			None => RawOrigin::None,
+impl<AccountId, Doughnut> From<(Option<AccountId>, Option<Doughnut>)> for RawOrigin<AccountId, Doughnut> {
+	fn from(val: (Option<AccountId>, Option<Doughnut>)) -> RawOrigin<AccountId, Doughnut> {
+		match (val.0, val.1) {
+			(Some(who), None) => RawOrigin::Signed(who),
+			(Some(who), Some(doughnut)) => RawOrigin::Delegated(who, doughnut),
+			// Disallow delegation from unsigned extrinsics for now
+			_ => RawOrigin::None,
 		}
 	}
 }
 
 /// Exposed trait-generic origin type.
-pub type Origin<T> = RawOrigin<<T as Trait>::AccountId>;
+pub type Origin<T> = RawOrigin<<T as Trait>::AccountId, <T as Trait>::Doughnut>;
 
 // Create a Hash with 69 for each byte,
 // only used to build genesis config.
@@ -455,11 +461,12 @@ decl_storage! {
 	}
 }
 
-pub struct EnsureRoot<AccountId>(::rstd::marker::PhantomData<AccountId>);
+pub struct EnsureRoot<AccountId, Doughnut>(::rstd::marker::PhantomData<(AccountId, Doughnut)>);
 impl<
-	O: Into<Result<RawOrigin<AccountId>, O>> + From<RawOrigin<AccountId>>,
+	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
 	AccountId,
-> EnsureOrigin<O> for EnsureRoot<AccountId> {
+	Doughnut,
+> EnsureOrigin<O> for EnsureRoot<AccountId, Doughnut> {
 	type Success = ();
 	fn try_origin(o: O) -> Result<Self::Success, O> {
 		o.into().and_then(|o| match o {
@@ -469,26 +476,29 @@ impl<
 	}
 }
 
-pub struct EnsureSigned<AccountId>(::rstd::marker::PhantomData<AccountId>);
+pub struct EnsureSigned<AccountId, Doughnut>(::rstd::marker::PhantomData<(AccountId, Doughnut)>);
 impl<
-	O: Into<Result<RawOrigin<AccountId>, O>> + From<RawOrigin<AccountId>>,
+	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
 	AccountId,
-> EnsureOrigin<O> for EnsureSigned<AccountId> {
+	Doughnut,
+> EnsureOrigin<O> for EnsureSigned<AccountId, Doughnut> {
 	type Success = AccountId;
 	fn try_origin(o: O) -> Result<Self::Success, O> {
 		o.into().and_then(|o| match o {
+			// TODO: make sure ensure_signed!() works with delegated transactions
 			RawOrigin::Signed(who) => Ok(who),
 			r => Err(O::from(r)),
 		})
 	}
 }
 
-pub struct EnsureSignedBy<Who, AccountId>(::rstd::marker::PhantomData<(Who, AccountId)>);
+pub struct EnsureSignedBy<Who, AccountId, Doughnut>(::rstd::marker::PhantomData<(Who, AccountId, Doughnut)>);
 impl<
-	O: Into<Result<RawOrigin<AccountId>, O>> + From<RawOrigin<AccountId>>,
+	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
 	Who: Contains<AccountId>,
 	AccountId: PartialEq + Clone,
-> EnsureOrigin<O> for EnsureSignedBy<Who, AccountId> {
+	Doughnut,
+> EnsureOrigin<O> for EnsureSignedBy<Who, AccountId, Doughnut> {
 	type Success = AccountId;
 	fn try_origin(o: O) -> Result<Self::Success, O> {
 		o.into().and_then(|o| match o {
@@ -498,11 +508,12 @@ impl<
 	}
 }
 
-pub struct EnsureNone<AccountId>(::rstd::marker::PhantomData<AccountId>);
+pub struct EnsureNone<AccountId, Doughnut>(::rstd::marker::PhantomData<(AccountId, Doughnut)>);
 impl<
-	O: Into<Result<RawOrigin<AccountId>, O>> + From<RawOrigin<AccountId>>,
+	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
 	AccountId,
-> EnsureOrigin<O> for EnsureNone<AccountId> {
+	Doughnut,
+> EnsureOrigin<O> for EnsureNone<AccountId, Doughnut> {
 	type Success = ();
 	fn try_origin(o: O) -> Result<Self::Success, O> {
 		o.into().and_then(|o| match o {
@@ -522,8 +533,8 @@ impl<O, T> EnsureOrigin<O> for EnsureNever<T> {
 
 /// Ensure that the origin `o` represents a signed extrinsic (i.e. transaction).
 /// Returns `Ok` with the account that signed the extrinsic or an `Err` otherwise.
-pub fn ensure_signed<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<AccountId, &'static str>
-	where OuterOrigin: Into<Result<RawOrigin<AccountId>, OuterOrigin>>
+pub fn ensure_signed<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result<AccountId, &'static str>
+	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
 {
 	match o.into() {
 		Ok(RawOrigin::Signed(t)) => Ok(t),
@@ -532,8 +543,8 @@ pub fn ensure_signed<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<AccountId
 }
 
 /// Ensure that the origin `o` represents the root. Returns `Ok` or an `Err` otherwise.
-pub fn ensure_root<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), &'static str>
-	where OuterOrigin: Into<Result<RawOrigin<AccountId>, OuterOrigin>>
+pub fn ensure_root<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result<(), &'static str>
+	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
 {
 	match o.into() {
 		Ok(RawOrigin::Root) => Ok(()),
@@ -542,8 +553,8 @@ pub fn ensure_root<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), &'stati
 }
 
 /// Ensure that the origin `o` represents an unsigned extrinsic. Returns `Ok` or an `Err` otherwise.
-pub fn ensure_none<OuterOrigin, AccountId>(o: OuterOrigin) -> Result<(), &'static str>
-	where OuterOrigin: Into<Result<RawOrigin<AccountId>, OuterOrigin>>
+pub fn ensure_none<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result<(), &'static str>
+	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
 {
 	match o.into() {
 		Ok(RawOrigin::None) => Ok(()),

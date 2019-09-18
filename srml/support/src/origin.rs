@@ -189,8 +189,8 @@ macro_rules! impl_outer_origin {
 				}
 			}
 		}
-		impl From<Option<<$runtime as $system::Trait>::AccountId>> for $name {
-			fn from(x: Option<<$runtime as $system::Trait>::AccountId>) -> Self {
+		impl From<(Option<<$runtime as $system::Trait>::AccountId>,Option<<$runtime as $system::Trait>::Doughnut>)> for $name {
+			fn from(x: (Option<<$runtime as $system::Trait>::AccountId>, Option<<$runtime as $system::Trait>::Doughnut>)) -> Self {
 				<$system::Origin<$runtime>>::from(x).into()
 			}
 		}

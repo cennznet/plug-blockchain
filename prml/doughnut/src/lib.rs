@@ -21,10 +21,10 @@ use primitives::{
 	sr25519::{self},
 };
 use rstd::{self};
-use sr_primitives::traits::{DispatchError, DoughnutApi, DoughnutVerify, SignedExtension, Verify};
+use sr_primitives::traits::{DispatchError, DoughnutApi, DoughnutVerify, Member, SignedExtension, Verify};
 use sr_primitives::transaction_validity::ValidTransaction;
 use sr_primitives::weights::DispatchInfo;
-use support::additional_traits::DispatchVerifier;
+use support::{Parameter, additional_traits::DispatchVerifier};
 use system;
 use timestamp;
 
@@ -38,28 +38,36 @@ type Doughnut<Runtime> = <Runtime as system::Trait>::Doughnut;
 /// A doughnut wrapped for compatibility with the extrinsic transport layer and the plug runtime types.
 /// It can be passed to the runtime as a `SignedExtension` in an extrinsic.
 #[derive(Encode, Decode, Clone, Eq, PartialEq)]
-pub struct PlugDoughnut<Runtime: DoughnutRuntime>(Doughnut<Runtime>);
+pub struct PlugDoughnut<Doughnut: DoughnutApi, Runtime: DoughnutRuntime>(Doughnut, rstd::marker::PhantomData<Runtime>);
 
 #[cfg(feature = "std")]
-impl<Runtime: DoughnutRuntime + Send + Sync> rstd::fmt::Debug for PlugDoughnut<Runtime> {
+impl<Doughnut, Runtime> rstd::fmt::Debug for PlugDoughnut<Doughnut, Runtime>
+where
+	Doughnut: DoughnutApi + Encode,
+	Runtime: DoughnutRuntime + Send + Sync,
+{
 	fn fmt(&self, f: &mut rstd::fmt::Formatter) -> rstd::fmt::Result {
 		self.0.encode().fmt(f)
 	}
 }
 
-impl<Runtime: DoughnutRuntime> PlugDoughnut<Runtime> {
+impl<Doughnut, Runtime> PlugDoughnut<Doughnut, Runtime>
+where
+	Doughnut: DoughnutApi,
+	Runtime: DoughnutRuntime,
+{
 	/// Create a new PlugDoughnut
-	pub fn new(doughnut: Doughnut<Runtime>) -> Self {
-		Self(doughnut)
+	pub fn new(doughnut: Doughnut) -> Self {
+		Self(doughnut, rstd::marker::PhantomData)
 	}
 }
 
 // Re-implemented here due to sr25519 verification requiring an external
 // wasm VM call when using `no std`
-impl<Runtime: DoughnutRuntime> DoughnutVerify for PlugDoughnut<Runtime>
+impl<Doughnut, Runtime> DoughnutVerify for PlugDoughnut<Doughnut, Runtime>
 where
+	Doughnut: DoughnutApi<PublicKey=[u8; 32], Signature=[u8; 64]>,
 	Runtime: DoughnutRuntime,
-	Doughnut<Runtime>: DoughnutApi<PublicKey=[u8; 32], Signature=[u8; 64]>,
 {
 	/// Verify the doughnut signature. Returns `true` on success, false otherwise
 	fn verify(&self) -> bool {
@@ -82,11 +90,11 @@ where
 	}
 }
 
-impl<Runtime> SignedExtension for PlugDoughnut<Runtime>
+impl<Doughnut, Runtime> SignedExtension for PlugDoughnut<Doughnut, Runtime>
 where
-	Runtime: DoughnutRuntime + Send + Sync,
-	Doughnut<Runtime>: DoughnutApi<PublicKey=[u8; 32], Signature=[u8; 64]> + Send + Sync,
 	AccountId<Runtime>: AsRef<[u8]>,
+	Doughnut: DoughnutApi<PublicKey=[u8; 32], Signature=[u8; 64]> + Member + Parameter,
+	Runtime: DoughnutRuntime + Send + Sync,
 {
 	type AccountId = AccountId<Runtime>;
 	type AdditionalSigned = ();

@@ -88,9 +88,6 @@ use sr_primitives::{ApplyOutcome, ApplyError};
 use sr_primitives::transaction_validity::TransactionValidity;
 use sr_primitives::weights::GetDispatchInfo;
 
-//mod doughnut;
-//pub use doughnut::DoughnutExecutive;
-
 mod internal {
 	use sr_primitives::traits::DispatchError;
 
@@ -146,8 +143,8 @@ impl<
 where
 	Block::Extrinsic: Checkable<Context> + Codec,
 	CheckedOf<Block::Extrinsic, Context>: Applyable<AccountId=System::AccountId> + GetDispatchInfo,
-	CallOf<Block::Extrinsic, Context>: Dispatchable,
-	OriginOf<Block::Extrinsic, Context>: From<Option<System::AccountId>>,
+	CallOf<Block::Extrinsic, Context>: Dispatchable<Origin=System::Origin>,
+	OriginOf<Block::Extrinsic, Context>: From<(Option<System::AccountId>, Option<System::Doughnut>)>,
 	UnsignedValidator: ValidateUnsigned<Call=CallOf<Block::Extrinsic, Context>>,
 {
 	fn execute_block(block: Block) {
@@ -165,8 +162,8 @@ impl<
 where
 	Block::Extrinsic: Checkable<Context> + Codec,
 	CheckedOf<Block::Extrinsic, Context>: Applyable<AccountId=System::AccountId> + GetDispatchInfo,
-	CallOf<Block::Extrinsic, Context>: Dispatchable,
-	OriginOf<Block::Extrinsic, Context>: From<Option<System::AccountId>>,
+	CallOf<Block::Extrinsic, Context>: Dispatchable<Origin=System::Origin>,
+	OriginOf<Block::Extrinsic, Context>: From<(Option<System::AccountId>, Option<System::Doughnut>)>,
 	UnsignedValidator: ValidateUnsigned<Call=CallOf<Block::Extrinsic, Context>>,
 {
 	/// Start the execution of a particular block.

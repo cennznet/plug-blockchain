@@ -123,7 +123,7 @@ impl system::Trait for Runtime {
 	type WeightMultiplierUpdate = WeightMultiplierUpdateHandler;
 	type Event = Event;
 	type BlockHashCount = BlockHashCount;
-	type Doughnut = Doughnut;
+	type Doughnut = prml_doughnut::PlugDoughnut<Doughnut, Runtime>;
 	type DispatchVerifier = prml_doughnut::PlugDoughnutDispatcher<Runtime>;
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
@@ -471,7 +471,7 @@ pub type SignedBlock = generic::SignedBlock<Block>;
 pub type BlockId = generic::BlockId<Block>;
 /// The SignedExtension to the basic transaction logic.
 pub type SignedExtra = (
-	Option<prml_doughnut::PlugDoughnut<Runtime>>,
+	Option<<Runtime as system::Trait>::Doughnut>,
 	system::CheckVersion<Runtime>,
 	system::CheckGenesis<Runtime>,
 	system::CheckEra<Runtime>,

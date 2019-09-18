@@ -46,7 +46,7 @@ where
 	AccountId: Member + MaybeDisplay,
 	Call: Member + Dispatchable<Origin=Origin>,
 	Extra: SignedExtension<AccountId=AccountId, Call=Call> + DoughnutExtra<Doughnut=Doughnut>,
-	Origin: From<Option<AccountId>>,
+	Origin: From<(Option<AccountId>, Option<Doughnut>)>,
 	Doughnut: Send + Sync,
 {
 	type AccountId = AccountId;
@@ -78,8 +78,7 @@ where
 		info: DispatchInfo,
 		len: usize,
 	) -> Result<DispatchResult, DispatchError> {
-		// TODO: Convert origin type
-		let (maybe_who, _maybe_doughnut, pre) = if let Some((id, extra)) = self.signed {
+		let (maybe_who, maybe_doughnut, pre) = if let Some((id, extra)) = self.signed {
 			let pre = Extra::pre_dispatch(extra.clone(), &id, &self.function, info, len)?;
 			(Some(id), extra.doughnut(), pre)
 		} else {
@@ -87,7 +86,7 @@ where
 			(None, None, pre)
 		};
 
-		let res = self.function.dispatch(Origin::from(maybe_who));
+		let res = self.function.dispatch(Origin::from((maybe_who, maybe_doughnut)));
 		Extra::post_dispatch(pre, info, len);
 		Ok(res)
 	}
