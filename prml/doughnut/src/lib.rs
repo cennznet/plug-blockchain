@@ -20,7 +20,7 @@ use primitives::{
 	ed25519::{self},
 	sr25519::{self},
 };
-use rstd::{self};
+use rstd::{self, prelude::*};
 use sr_primitives::traits::{DispatchError, DoughnutApi, DoughnutVerify, Member, SignedExtension, Verify};
 use sr_primitives::transaction_validity::ValidTransaction;
 use sr_primitives::weights::DispatchInfo;
@@ -59,6 +59,42 @@ where
 	/// Create a new PlugDoughnut
 	pub fn new(doughnut: Doughnut) -> Self {
 		Self(doughnut, rstd::marker::PhantomData)
+	}
+}
+
+// proxy calls to the inner Doughnut type
+impl<Doughnut, Runtime> DoughnutApi for PlugDoughnut<Doughnut, Runtime>
+where
+	Doughnut: DoughnutApi,
+	Runtime: DoughnutRuntime,
+{
+	type PublicKey = <Doughnut as DoughnutApi>::PublicKey;
+	type Signature = <Doughnut as DoughnutApi>::Signature;
+	type Timestamp = <Doughnut as DoughnutApi>::Timestamp;
+
+	fn holder(&self) -> Self::PublicKey {
+		self.0.holder()
+	}
+	fn issuer(&self) -> Self::PublicKey {
+		self.0.issuer()
+	}
+	fn not_before(&self) -> Self::Timestamp {
+		self.0.not_before()
+	}
+	fn expiry(&self) -> Self::Timestamp {
+		self.0.expiry()
+	}
+	fn signature(&self) -> Self::Signature {
+		self.0.signature()
+	}
+	fn signature_version(&self) -> u8 {
+		self.0.signature_version()
+	}
+	fn payload(&self) -> Vec<u8> {
+		self.0.payload()
+	}
+	fn get_domain(&self, domain: &str) -> Option<&[u8]> {
+		self.0.get_domain(domain)
 	}
 }
 

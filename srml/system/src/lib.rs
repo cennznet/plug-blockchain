@@ -106,6 +106,7 @@ use sr_primitives::transaction_validity::{
 use sr_primitives::traits::{self, CheckEqual, SimpleArithmetic, Zero, SignedExtension, Convert,
 	SimpleBitOps, Hash, Member, MaybeDisplay, EnsureOrigin, DispatchError, SaturatedConversion,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup, One, Bounded, Lookup,
+	DoughnutApi,
 };
 use primitives::storage::well_known_keys;
 use srml_support::{
@@ -225,7 +226,7 @@ pub trait Trait: 'static + Eq + Clone {
 	type BlockHashCount: Get<Self::BlockNumber>;
 
 	/// The runtime doughnut type
-	type Doughnut: Parameter + Member;
+	type Doughnut: Parameter + Member + DoughnutApi;
 
 	/// A type which verifies a doughnut to dispatch a runtime call
 	type DispatchVerifier: DispatchVerifierT<Self::Doughnut>;
