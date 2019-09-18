@@ -171,7 +171,7 @@ pub fn extrinsics_data_root<H: Hash>(xts: Vec<Vec<u8>>) -> H::Output {
 
 pub trait Trait: 'static + Eq + Clone {
 	/// The aggregated `Origin` type used by dispatchable calls.
-	type Origin: Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>> + From<RawOrigin<Self::AccountId, Self::Doughnut>>;
+	type Origin: Clone + Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>> + From<RawOrigin<Self::AccountId, Self::Doughnut>>;
 
 	/// The aggregated `Call` type.
 	type Call;
@@ -485,8 +485,22 @@ impl<
 	type Success = AccountId;
 	fn try_origin(o: O) -> Result<Self::Success, O> {
 		o.into().and_then(|o| match o {
-			// TODO: make sure ensure_signed!() works with delegated transactions
 			RawOrigin::Signed(who) => Ok(who),
+			r => Err(O::from(r)),
+		})
+	}
+}
+
+pub struct EnsureDelegated<AccountId, Doughnut>(::rstd::marker::PhantomData<(AccountId, Doughnut)>);
+impl<
+	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
+	AccountId,
+	Doughnut,
+> EnsureOrigin<O> for EnsureDelegated<AccountId, Doughnut> {
+	type Success = (AccountId, Doughnut);
+	fn try_origin(o: O) -> Result<Self::Success, O> {
+		o.into().and_then(|o| match o {
+			RawOrigin::Delegated(who, doughnut) => Ok((who, doughnut)),
 			r => Err(O::from(r)),
 		})
 	}
@@ -539,6 +553,18 @@ pub fn ensure_signed<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result
 	match o.into() {
 		Ok(RawOrigin::Signed(t)) => Ok(t),
 		_ => Err("bad origin: expected to be a signed origin"),
+	}
+}
+
+/// Ensure that the origin `o` represents a signed extrinsic (i.e. transaction) with a doughnut delegation proof.
+/// Returns `Ok` with the account that signed the extrinsic and the attached doughnut or an `Err` otherwise.
+pub fn ensure_delegated<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result<(AccountId, Doughnut), &'static str>
+	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
+{
+	// TODO: Avoid consuming here, need a ref based check to get doughnut ref.
+	match o.into() {
+		Ok(RawOrigin::Delegated(who, doughnut)) => Ok((who, doughnut)),
+		_ => Err("bad origin: expected to be a delegated origin"),
 	}
 }
 

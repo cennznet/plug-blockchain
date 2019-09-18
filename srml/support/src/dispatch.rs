@@ -1054,16 +1054,14 @@ macro_rules! decl_module {
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
 						use $crate::dispatch::DispatchVerifier;
-						// Check if a doughnut exists in this execution context and whether it grants permission to
-						// dispatch the call.
-						// TODO: match over origin instead
-						// if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
-						// 	let _ = <T as $system::Trait>::DispatchVerifier::verify(
-						// 		&doughnut,
-						// 		env!("CARGO_PKG_NAME"), // module
-						// 		stringify!($fn_name),   // method
-						// 	)?;
-						// }
+						// Check if this is a doughnut delegated dispatch and whether it is authorized
+						if let Ok((_who, doughnut)) = $system::ensure_delegated($from.clone()) {
+							let _ = <T as $system::Trait>::DispatchVerifier::verify(
+								&doughnut,
+								env!("CARGO_PKG_NAME"), // module
+								stringify!($fn_name),   // method
+							)?;
+						}
 
 						$( $impl )*
 					}
