@@ -473,11 +473,11 @@ where
 /// This is not possible with the `SignedExtension` trait alone, since the fields are indistinguishable
 /// from each other and are only decoded in pre-set hooks (`pre_dispatch`, `validate`, etc.), where as the doughnut is
 /// required in other places outside these hooks, such as `Applyable::dispatch`.  
-pub trait DoughnutExtra {
+pub trait MaybeDoughnut {
   /// The extension doughnut type
-  type Doughnut: Send + Sync;
+  type Doughnut: Send + Sync + DoughnutApi;
   /// Return the doughnut from the `SignedExtension` payload, if any
-  fn doughnut(self) -> Option<Self::Doughnut>;
+  fn doughnut(&self) -> Option<&Self::Doughnut>;
 }
 
 /// Abstraction around hashing
@@ -1045,12 +1045,12 @@ macro_rules! tuple_impl_indexed {
 
     impl<
       AccountId,
-      Doughnut: SignedExtension<AccountId=AccountId>,
+      Doughnut: SignedExtension<AccountId=AccountId> + DoughnutApi,
       $($direct: SignedExtension<AccountId=AccountId>),+
-    > DoughnutExtra for (Option<Doughnut>, $($direct),+,) {
+    > MaybeDoughnut for (Option<Doughnut>, $($direct),+,) {
       type Doughnut = Doughnut;
-      fn doughnut(self) -> Option<Self::Doughnut> {
-        self.0
+      fn doughnut(&self) -> Option<&Self::Doughnut> {
+        self.0.as_ref()
       }
     }
 	};

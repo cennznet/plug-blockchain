@@ -17,6 +17,7 @@
 
 use codec::{Encode, Decode};
 use primitives::{
+	crypto::UncheckedFrom,
 	ed25519::{self},
 	sr25519::{self},
 };
@@ -62,21 +63,22 @@ where
 	}
 }
 
-// proxy calls to the inner Doughnut type
+// Proxy calls to the inner Doughnut type and provide Runtime type conversions where required.
 impl<Doughnut, Runtime> DoughnutApi for PlugDoughnut<Doughnut, Runtime>
 where
-	Doughnut: DoughnutApi,
+	Doughnut: DoughnutApi<PublicKey=[u8; 32]>,
 	Runtime: DoughnutRuntime,
+	AccountId<Runtime>: AsRef<[u8]> + UncheckedFrom<[u8; 32]>,
 {
-	type PublicKey = <Doughnut as DoughnutApi>::PublicKey;
+	type PublicKey = AccountId<Runtime>;
 	type Signature = <Doughnut as DoughnutApi>::Signature;
 	type Timestamp = <Doughnut as DoughnutApi>::Timestamp;
 
 	fn holder(&self) -> Self::PublicKey {
-		self.0.holder()
+		UncheckedFrom::unchecked_from(self.0.holder())
 	}
 	fn issuer(&self) -> Self::PublicKey {
-		self.0.issuer()
+		UncheckedFrom::unchecked_from(self.0.issuer())
 	}
 	fn not_before(&self) -> Self::Timestamp {
 		self.0.not_before()

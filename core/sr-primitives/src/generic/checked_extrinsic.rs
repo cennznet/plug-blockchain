@@ -20,7 +20,7 @@
 use rstd::result::Result;
 use crate::traits::{
 	self, Member, MaybeDisplay, SignedExtension, DispatchError, Dispatchable, DispatchResult,
-	DoughnutExtra, ValidateUnsigned
+	DoughnutApi, MaybeDoughnut, ValidateUnsigned
 };
 use crate::weights::{GetDispatchInfo, DispatchInfo};
 use crate::transaction_validity::TransactionValidity;
@@ -43,11 +43,11 @@ impl<AccountId, Call, Extra, Origin, Doughnut> traits::Applyable
 for
 	CheckedExtrinsic<AccountId, Call, Extra>
 where
-	AccountId: Member + MaybeDisplay,
+	AccountId: Member + MaybeDisplay + AsRef<[u8]>,
 	Call: Member + Dispatchable<Origin=Origin>,
-	Extra: SignedExtension<AccountId=AccountId, Call=Call> + DoughnutExtra<Doughnut=Doughnut>,
+	Extra: SignedExtension<AccountId=AccountId, Call=Call> + MaybeDoughnut<Doughnut=Doughnut>,
 	Origin: From<(Option<AccountId>, Option<Doughnut>)>,
-	Doughnut: Send + Sync,
+	Doughnut: Member + DoughnutApi<PublicKey=AccountId>,
 {
 	type AccountId = AccountId;
 	type Call = Call;
@@ -78,15 +78,24 @@ where
 		info: DispatchInfo,
 		len: usize,
 	) -> Result<DispatchResult, DispatchError> {
-		let (maybe_who, maybe_doughnut, pre) = if let Some((id, extra)) = self.signed {
+		let (pre, res) = if let Some((id, extra)) = self.signed {
+			let maybe_doughnut = extra.doughnut();
 			let pre = Extra::pre_dispatch(extra.clone(), &id, &self.function, info, len)?;
-			(Some(id), extra.doughnut(), pre)
+
+			if let Some(doughnut) = maybe_doughnut {
+				// A delegated transaction
+				(pre, self.function.dispatch(Origin::from((Some(doughnut.issuer()), Some(doughnut.clone())))))
+			} else {
+				// An ordinary signed transaction
+				(pre, self.function.dispatch(Origin::from((Some(id), None))))
+			}
+
 		} else {
+			// An inherent unsiged transaction
 			let pre = Extra::pre_dispatch_unsigned(&self.function, info, len)?;
-			(None, None, pre)
+			(pre, self.function.dispatch(Origin::from((None, None))))
 		};
 
-		let res = self.function.dispatch(Origin::from((maybe_who, maybe_doughnut)));
 		Extra::post_dispatch(pre, info, len);
 		Ok(res)
 	}
