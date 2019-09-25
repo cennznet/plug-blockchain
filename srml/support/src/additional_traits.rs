@@ -1,7 +1,7 @@
 //! Additional traits to srml original traits. These traits are generally used
 //! to decouple `srml` modules from `prml` modules.
 
-use sr_std::marker::PhantomData;
+use rstd::marker::PhantomData;
 
 /// Perform fee payment for an extrinsic
 pub trait ChargeExtrinsicFee<AccountId, Extrinsic> {
