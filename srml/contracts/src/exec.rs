@@ -22,7 +22,7 @@ use crate::rent;
 
 use rstd::prelude::*;
 use sr_primitives::traits::{Bounded, CheckedAdd, CheckedSub, Zero};
-use srml_support::traits::{WithdrawReason, Currency};
+use support::traits::{WithdrawReason, Currency};
 use timestamp;
 
 pub type AccountIdOf<T> = <T as system::Trait>::AccountId;
@@ -75,11 +75,12 @@ pub type ExecResult = Result<ExecReturnValue, ExecError>;
 /// wrap the error string into an ExecutionError with the provided buffer and return from the
 /// enclosing function. This macro is used instead of .map_err(..)? in order to avoid taking
 /// ownership of buffer unless there is an error.
+#[macro_export]
 macro_rules! try_or_exec_error {
 	($e:expr, $buffer:expr) => {
 		match $e {
 			Ok(val) => val,
-			Err(reason) => return Err(ExecError { reason, buffer: $buffer }),
+			Err(reason) => return Err($crate::exec::ExecError { reason, buffer: $buffer }),
 		}
 	}
 }
@@ -154,6 +155,9 @@ pub trait Ext {
 	/// Returns a reference to the timestamp of the current block
 	fn now(&self) -> &MomentOf<Self::T>;
 
+	/// Returns the minimum balance that is required for creating an account.
+	fn minimum_balance(&self) -> BalanceOf<Self::T>;
+
 	/// Returns a random number for the current block with the given subject.
 	fn random(&self, subject: &[u8]) -> SeedOf<Self::T>;
 
@@ -186,15 +190,6 @@ pub trait Loader<T: Trait> {
 	/// Load the main portion of the code specified by the `code_hash`. This executable
 	/// is called for each call to a contract.
 	fn load_main(&self, code_hash: &CodeHash<T>) -> Result<Self::Executable, &'static str>;
-}
-
-/// Struct that records a request to deposit an event with a list of topics.
-#[cfg_attr(any(feature = "std", test), derive(Debug, PartialEq, Eq))]
-pub struct IndexedEvent<T: Trait> {
-	/// A list of topics this event will be deposited with.
-	pub topics: Vec<T::Hash>,
-	/// The event to deposit.
-	pub event: Event<T>,
 }
 
 /// A trait that represent a virtual machine.
@@ -426,7 +421,7 @@ where
 	) -> Result<(T::AccountId, ExecReturnValue), ExecError> {
 		if self.depth == self.config.max_depth as usize {
 			return Err(ExecError {
-				reason: "reached maximum depth, cannot create",
+				reason: "reached maximum depth, cannot instantiate",
 				buffer: input_data,
 			});
 		}
@@ -453,7 +448,7 @@ where
 
 		let output = self.with_nested_context(dest.clone(), dest_trie_id, |nested| {
 			try_or_exec_error!(
-				nested.overlay.create_contract(&dest, code_hash.clone()),
+				nested.overlay.instantiate_contract(&dest, code_hash.clone()),
 				input_data
 			);
 
@@ -771,6 +766,10 @@ where
 		&self.timestamp
 	}
 
+	fn minimum_balance(&self) -> BalanceOf<T> {
+		self.ctx.config.existential_deposit
+	}
+
 	fn deposit_event(&mut self, topics: Vec<T::Hash>, data: Vec<u8>) {
 		self.ctx.deferred.push(DeferredAction::DepositEvent {
 			topics,
@@ -947,7 +946,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, exec_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, exec_ch).unwrap();
 
 			assert_matches!(
 				ctx.call(BOB, value, &mut gas_meter, data),
@@ -1047,7 +1046,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(origin, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, return_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, return_ch).unwrap();
 			ctx.overlay.set_balance(&origin, 100);
 			ctx.overlay.set_balance(&dest, 0);
 
@@ -1070,7 +1069,7 @@ mod tests {
 		let dest = BOB;
 
 		// This test sends 50 units of currency to a non-existent account.
-		// This should create lead to creation of a new account thus
+		// This should lead to creation of a new account thus
 		// a fee should be charged.
 		with_externalities(
 			&mut ExtBuilder::default().existential_deposit(15).build(),
@@ -1129,7 +1128,7 @@ mod tests {
 		);
 
 		// This test sends 50 units of currency as an endownment to a newly
-		// created contract.
+		// instantiated contract.
 		with_externalities(
 			&mut ExtBuilder::default().existential_deposit(15).build(),
 			|| {
@@ -1208,7 +1207,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(origin, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, return_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, return_ch).unwrap();
 
 			let result = ctx.call(
 				dest,
@@ -1239,7 +1238,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(origin, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, return_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, return_ch).unwrap();
 
 			let result = ctx.call(
 				dest,
@@ -1267,7 +1266,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, input_data_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, input_data_ch).unwrap();
 
 			let result = ctx.call(
 				BOB,
@@ -1336,7 +1335,7 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, recurse_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, recurse_ch).unwrap();
 
 			let result = ctx.call(
 				BOB,
@@ -1381,8 +1380,8 @@ mod tests {
 			let cfg = Config::preload();
 
 			let mut ctx = ExecutionContext::top_level(origin, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&dest, bob_ch).unwrap();
-			ctx.overlay.create_contract(&CHARLIE, charlie_ch).unwrap();
+			ctx.overlay.instantiate_contract(&dest, bob_ch).unwrap();
+			ctx.overlay.instantiate_contract(&CHARLIE, charlie_ch).unwrap();
 
 			let result = ctx.call(
 				dest,
@@ -1422,8 +1421,8 @@ mod tests {
 		with_externalities(&mut ExtBuilder::default().build(), || {
 			let cfg = Config::preload();
 			let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
-			ctx.overlay.create_contract(&BOB, bob_ch).unwrap();
-			ctx.overlay.create_contract(&CHARLIE, charlie_ch).unwrap();
+			ctx.overlay.instantiate_contract(&BOB, bob_ch).unwrap();
+			ctx.overlay.instantiate_contract(&CHARLIE, charlie_ch).unwrap();
 
 			let result = ctx.call(
 				BOB,
@@ -1478,7 +1477,7 @@ mod tests {
 				let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
 				ctx.overlay.set_balance(&ALICE, 1000);
 
-				let created_contract_address = assert_matches!(
+				let instantiated_contract_address = assert_matches!(
 					ctx.instantiate(
 						100,
 						&mut GasMeter::<Test>::with_limit(10000, 1),
@@ -1490,14 +1489,14 @@ mod tests {
 
 				// Check that the newly created account has the expected code hash and
 				// there are instantiation event.
-				assert_eq!(ctx.overlay.get_code_hash(&created_contract_address).unwrap(), dummy_ch);
+				assert_eq!(ctx.overlay.get_code_hash(&instantiated_contract_address).unwrap(), dummy_ch);
 				assert_eq!(&ctx.events(), &[
 					DeferredAction::DepositEvent {
-						event: RawEvent::Transfer(ALICE, created_contract_address, 100),
+						event: RawEvent::Transfer(ALICE, instantiated_contract_address, 100),
 						topics: Vec::new(),
 					},
 					DeferredAction::DepositEvent {
-						event: RawEvent::Instantiated(ALICE, created_contract_address),
+						event: RawEvent::Instantiated(ALICE, instantiated_contract_address),
 						topics: Vec::new(),
 					}
 				]);
@@ -1521,7 +1520,7 @@ mod tests {
 				let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
 				ctx.overlay.set_balance(&ALICE, 1000);
 
-				let created_contract_address = assert_matches!(
+				let instantiated_contract_address = assert_matches!(
 					ctx.instantiate(
 						100,
 						&mut GasMeter::<Test>::with_limit(10000, 1),
@@ -1532,7 +1531,7 @@ mod tests {
 				);
 
 				// Check that the account has not been created.
-				assert!(ctx.overlay.get_code_hash(&created_contract_address).is_none());
+				assert!(ctx.overlay.get_code_hash(&instantiated_contract_address).is_none());
 				assert!(ctx.events().is_empty());
 			}
 		);
@@ -1544,12 +1543,12 @@ mod tests {
 
 		let mut loader = MockLoader::empty();
 		let dummy_ch = loader.insert(|_| exec_success());
-		let created_contract_address = Rc::new(RefCell::new(None::<u64>));
-		let creator_ch = loader.insert({
+		let instantiated_contract_address = Rc::new(RefCell::new(None::<u64>));
+		let instantiator_ch = loader.insert({
 			let dummy_ch = dummy_ch.clone();
-			let created_contract_address = Rc::clone(&created_contract_address);
+			let instantiated_contract_address = Rc::clone(&instantiated_contract_address);
 			move |ctx| {
-				// Instantiate a contract and save it's address in `created_contract_address`.
+				// Instantiate a contract and save it's address in `instantiated_contract_address`.
 				let (address, output) = ctx.ext.instantiate(
 					&dummy_ch,
 					15u64,
@@ -1557,7 +1556,7 @@ mod tests {
 					vec![]
 				).unwrap();
 
-				*created_contract_address.borrow_mut() = address.into();
+				*instantiated_contract_address.borrow_mut() = address.into();
 				Ok(output)
 			}
 		});
@@ -1568,29 +1567,29 @@ mod tests {
 				let cfg = Config::preload();
 				let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
 				ctx.overlay.set_balance(&ALICE, 1000);
-				ctx.overlay.create_contract(&BOB, creator_ch).unwrap();
+				ctx.overlay.instantiate_contract(&BOB, instantiator_ch).unwrap();
 
 				assert_matches!(
 					ctx.call(BOB, 20, &mut GasMeter::<Test>::with_limit(1000, 1), vec![]),
 					Ok(_)
 				);
 
-				let created_contract_address = created_contract_address.borrow().as_ref().unwrap().clone();
+				let instantiated_contract_address = instantiated_contract_address.borrow().as_ref().unwrap().clone();
 
 				// Check that the newly created account has the expected code hash and
 				// there are instantiation event.
-				assert_eq!(ctx.overlay.get_code_hash(&created_contract_address).unwrap(), dummy_ch);
+				assert_eq!(ctx.overlay.get_code_hash(&instantiated_contract_address).unwrap(), dummy_ch);
 				assert_eq!(&ctx.events(), &[
 					DeferredAction::DepositEvent {
 						event: RawEvent::Transfer(ALICE, BOB, 20),
 						topics: Vec::new(),
 					},
 					DeferredAction::DepositEvent {
-						event: RawEvent::Transfer(BOB, created_contract_address, 15),
+						event: RawEvent::Transfer(BOB, instantiated_contract_address, 15),
 						topics: Vec::new(),
 					},
 					DeferredAction::DepositEvent {
-						event: RawEvent::Instantiated(BOB, created_contract_address),
+						event: RawEvent::Instantiated(BOB, instantiated_contract_address),
 						topics: Vec::new(),
 					},
 				]);
@@ -1606,10 +1605,10 @@ mod tests {
 		let dummy_ch = loader.insert(
 			|_| Err(ExecError { reason: "It's a trap!", buffer: Vec::new() })
 		);
-		let creator_ch = loader.insert({
+		let instantiator_ch = loader.insert({
 			let dummy_ch = dummy_ch.clone();
 			move |ctx| {
-				// Instantiate a contract and save it's address in `created_contract_address`.
+				// Instantiate a contract and save it's address in `instantiated_contract_address`.
 				assert_matches!(
 					ctx.ext.instantiate(
 						&dummy_ch,
@@ -1630,14 +1629,14 @@ mod tests {
 				let cfg = Config::preload();
 				let mut ctx = ExecutionContext::top_level(ALICE, &cfg, &vm, &loader);
 				ctx.overlay.set_balance(&ALICE, 1000);
-				ctx.overlay.create_contract(&BOB, creator_ch).unwrap();
+				ctx.overlay.instantiate_contract(&BOB, instantiator_ch).unwrap();
 
 				assert_matches!(
 					ctx.call(BOB, 20, &mut GasMeter::<Test>::with_limit(1000, 1), vec![]),
 					Ok(_)
 				);
 
-				// The contract wasn't created so we don't expect to see an instantiation
+				// The contract wasn't instantiated so we don't expect to see an instantiation
 				// event here.
 				assert_eq!(&ctx.events(), &[
 					DeferredAction::DepositEvent {

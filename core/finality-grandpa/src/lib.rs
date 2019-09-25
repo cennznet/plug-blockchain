@@ -68,7 +68,7 @@ use fg_primitives::{GrandpaApi, AuthorityPair};
 use keystore::KeyStorePtr;
 use inherents::InherentDataProviders;
 use consensus_common::SelectChain;
-use primitives::{H256, Blake2Hasher};
+use primitives::{H256, Blake2Hasher, Pair};
 use substrate_telemetry::{telemetry, CONSENSUS_INFO, CONSENSUS_DEBUG, CONSENSUS_WARN};
 use serde_json;
 
@@ -93,10 +93,6 @@ mod light_import;
 mod observer;
 mod until_imported;
 
-#[cfg(feature="service-integration")]
-mod service_integration;
-#[cfg(feature="service-integration")]
-pub use service_integration::{LinkHalfForService, BlockImportForService, BlockImportForLightService};
 pub use communication::Network;
 pub use finality_proof::FinalityProofProvider;
 pub use light_import::light_block_import;
@@ -107,7 +103,6 @@ use environment::{Environment, VoterSetState};
 use import::GrandpaBlockImport;
 use until_imported::UntilGlobalMessageBlocksImported;
 use communication::NetworkBridge;
-use service::TelemetryOnConnect;
 use fg_primitives::{AuthoritySignature, SetId, AuthorityWeight};
 
 // Re-export these two because it's just so damn convenient.
@@ -344,10 +339,10 @@ pub struct LinkHalf<B, E, Block: BlockT<Hash=H256>, RA, SC> {
 /// to it.
 pub fn block_import<B, E, Block: BlockT<Hash=H256>, RA, PRA, SC>(
 	client: Arc<Client<B, E, Block, RA>>,
-	api: Arc<PRA>,
+	api: &PRA,
 	select_chain: SC,
 ) -> Result<(
-		GrandpaBlockImport<B, E, Block, RA, PRA, SC>,
+		GrandpaBlockImport<B, E, Block, RA, SC>,
 		LinkHalf<B, E, Block, RA, SC>
 	), ClientError>
 where
@@ -364,8 +359,7 @@ where
 	let genesis_hash = chain_info.chain.genesis_hash;
 
 	let persistent_data = aux_schema::load_persistent(
-		#[allow(deprecated)]
-		&**client.backend(),
+		&*client,
 		genesis_hash,
 		<NumberFor<Block>>::zero(),
 		|| {
@@ -387,7 +381,6 @@ where
 			persistent_data.authority_set.clone(),
 			voter_commands_tx,
 			persistent_data.consensus_changes.clone(),
-			api,
 		),
 		LinkHalf {
 			client,
@@ -457,7 +450,7 @@ fn register_finality_tracker_inherent_data_provider<B, E, Block: BlockT<Hash=H25
 			.register_provider(srml_finality_tracker::InherentDataProvider::new(move || {
 				#[allow(deprecated)]
 				{
-					let info = client.backend().blockchain().info();
+					let info = client.info().chain;
 					telemetry!(CONSENSUS_INFO; "afg.finalized";
 						"finalized_number" => ?info.finalized_number,
 						"finalized_hash" => ?info.finalized_hash,
@@ -484,7 +477,7 @@ pub struct GrandpaParams<B, E, Block: BlockT<Hash=H256>, N, RA, SC, X> {
 	/// Handle to a future that will resolve on exit.
 	pub on_exit: X,
 	/// If supplied, can be used to hook on telemetry connection established events.
-	pub telemetry_on_connect: Option<TelemetryOnConnect>,
+	pub telemetry_on_connect: Option<mpsc::UnboundedReceiver<()>>,
 }
 
 /// Run a GRANDPA voter as a task. Provide configuration and a link to a
@@ -529,20 +522,25 @@ pub fn run_grandpa_voter<B, E, Block: BlockT<Hash=H256>, N, RA, SC, X>(
 
 	register_finality_tracker_inherent_data_provider(client.clone(), &inherent_data_providers)?;
 
+	let conf = config.clone();
 	let telemetry_task = if let Some(telemetry_on_connect) = telemetry_on_connect {
 		let authorities = persistent_data.authority_set.clone();
-		let events = telemetry_on_connect.telemetry_connection_sinks
+		let events = telemetry_on_connect
 			.for_each(move |_| {
+				let curr = authorities.current_authorities();
+				let mut auths = curr.voters().into_iter().map(|(p, _)| p);
+				let maybe_authority_id = authority_id(&mut auths, &conf.keystore)
+					.unwrap_or(Default::default());
+
 				telemetry!(CONSENSUS_INFO; "afg.authority_set";
-					 "authority_set_id" => ?authorities.set_id(),
-					 "authorities" => {
-						let curr = authorities.current_authorities();
-						let voters = curr.voters();
-						let authorities: Vec<String> =
-							voters.iter().map(|(id, _)| id.to_string()).collect();
+					"authority_id" => maybe_authority_id.to_string(),
+					"authority_set_id" => ?authorities.set_id(),
+					"authorities" => {
+						let authorities: Vec<String> = curr.voters()
+							.iter().map(|(id, _)| id.to_string()).collect();
 						serde_json::to_string(&authorities)
 							.expect("authorities is always at least an empty vector; elements are always of type string")
-					 }
+					}
 				);
 				Ok(())
 			})
@@ -638,10 +636,26 @@ where
 			"name" => ?self.env.config.name(), "set_id" => ?self.env.set_id
 		);
 
+		let chain_info = self.env.inner.info();
+
+		let maybe_authority_id = is_voter(&self.env.voters, &self.env.config.keystore)
+			.map(|ap| ap.public())
+			.unwrap_or(Default::default());
+		telemetry!(CONSENSUS_INFO; "afg.authority_set";
+			"number" => ?chain_info.chain.finalized_number,
+			"hash" => ?chain_info.chain.finalized_hash,
+			"authority_id" => maybe_authority_id.to_string(),
+			"authority_set_id" => ?self.env.set_id,
+			"authorities" => {
+				let authorities: Vec<String> = self.env.voters.voters()
+					.iter().map(|(id, _)| id.to_string()).collect();
+				serde_json::to_string(&authorities)
+					.expect("authorities is always at least an empty vector; elements are always of type string")
+			},
+		);
+
 		match &*self.env.voter_set_state.read() {
 			VoterSetState::Live { completed_rounds, .. } => {
-				let chain_info = self.env.inner.info();
-
 				let last_finalized = (
 					chain_info.chain.finalized_hash,
 					chain_info.chain.finalized_number,
@@ -698,8 +712,7 @@ where
 						(new.canon_hash, new.canon_number),
 					);
 
-					#[allow(deprecated)]
-					aux_schema::write_voter_set_state(&**self.env.inner.backend(), &set_state)?;
+					aux_schema::write_voter_set_state(&*self.env.inner, &set_state)?;
 					Ok(Some(set_state))
 				})?;
 
@@ -727,8 +740,7 @@ where
 					let completed_rounds = voter_set_state.completed_rounds();
 					let set_state = VoterSetState::Paused { completed_rounds };
 
-					#[allow(deprecated)]
-					aux_schema::write_voter_set_state(&**self.env.inner.backend(), &set_state)?;
+					aux_schema::write_voter_set_state(&*self.env.inner, &set_state)?;
 					Ok(Some(set_state))
 				})?;
 
@@ -847,6 +859,26 @@ fn is_voter(
 	match keystore {
 		Some(keystore) => voters.voters().iter()
 			.find_map(|(p, _)| keystore.read().key_pair::<AuthorityPair>(&p).ok()),
+		None => None,
+	}
+}
+
+/// Returns the authority id of this node, if available.
+fn authority_id<'a, I>(
+	authorities: &mut I,
+	keystore: &Option<KeyStorePtr>,
+) -> Option<AuthorityId> where
+	I: Iterator<Item = &'a AuthorityId>,
+{
+	match keystore {
+		Some(keystore) => {
+			authorities
+				.find_map(|p| {
+					keystore.read().key_pair::<AuthorityPair>(&p)
+						.ok()
+						.map(|ap| ap.public())
+				})
+		}
 		None => None,
 	}
 }

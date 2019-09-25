@@ -20,18 +20,20 @@
 
 use rstd::prelude::*;
 use rstd::{result, convert::TryFrom};
-use sr_primitives::traits::{Zero, Bounded, CheckedMul, CheckedDiv, EnsureOrigin, Hash};
-use sr_primitives::weights::SimpleDispatchInfo;
+use sr_primitives::{
+	traits::{Zero, Bounded, CheckedMul, CheckedDiv, EnsureOrigin, Hash, Dispatchable},
+	weights::SimpleDispatchInfo,
+};
 use codec::{Encode, Decode, Input, Output, Error};
-use srml_support::{
+use support::{
 	decl_module, decl_storage, decl_event, ensure,
-	StorageValue, StorageMap, Parameter, Dispatchable, EnumerableStorageMap,
+	Parameter,
 	traits::{
-		Currency, ReservableCurrency, LockableCurrency, WithdrawReason, LockIdentifier,
-		OnFreeBalanceZero, Get
+		Currency, ReservableCurrency, LockableCurrency, WithdrawReason, LockIdentifier, Get,
+		OnFreeBalanceZero
 	}
 };
-use srml_support::dispatch::Result;
+use support::dispatch::Result;
 use system::{ensure_signed, ensure_root};
 
 mod vote_threshold;
@@ -354,7 +356,7 @@ decl_module! {
 		/// Period in blocks where an external proposal may not be re-submitted after being vetoed.
 		const CooloffPeriod: T::BlockNumber = T::CooloffPeriod::get();
 
-		fn deposit_event<T>() = default;
+		fn deposit_event() = default;
 
 		/// Propose a sensitive action to be taken.
 		///
@@ -377,9 +379,8 @@ decl_module! {
 			PublicPropCount::put(index + 1);
 			<DepositOf<T>>::insert(index, (value, vec![who.clone()]));
 
-			let mut props = Self::public_props();
-			props.push((index, (*proposal).clone(), who));
-			<PublicProps<T>>::put(props);
+			let new_prop = (index, (*proposal).clone(), who);
+			<PublicProps<T>>::append_or_put([new_prop].into_iter());
 
 			Self::deposit_event(RawEvent::Proposed(index, value));
 		}
@@ -561,7 +562,7 @@ decl_module! {
 
 		fn on_initialize(n: T::BlockNumber) {
 			if let Err(e) = Self::end_block(n) {
-				runtime_io::print(e);
+				sr_primitives::print(e);
 			}
 		}
 
@@ -788,7 +789,7 @@ impl<T: Trait> Module<T> {
 	fn do_vote(who: T::AccountId, ref_index: ReferendumIndex, vote: Vote) -> Result {
 		ensure!(Self::is_active_referendum(ref_index), "vote given for invalid referendum.");
 		if !<VoteOf<T>>::exists(&(ref_index, who.clone())) {
-			<VotersFor<T>>::mutate(ref_index, |voters| voters.push(who.clone()));
+			<VotersFor<T>>::append_or_insert(ref_index, [who.clone()].into_iter());
 		}
 		<VoteOf<T>>::insert(&(ref_index, who), vote);
 		Ok(())
@@ -926,9 +927,9 @@ impl<T: Trait> Module<T> {
 			if info.delay.is_zero() {
 				Self::enact_proposal(info.proposal, index);
 			} else {
-				<DispatchQueue<T>>::mutate(
+				<DispatchQueue<T>>::append_or_insert(
 					now + info.delay,
-					|q| q.push(Some((info.proposal, index)))
+					[Some((info.proposal, index))].into_iter()
 				);
 			}
 		} else {
@@ -971,7 +972,7 @@ impl<T: Trait> OnFreeBalanceZero<T::AccountId> for Module<T> {
 mod tests {
 	use super::*;
 	use runtime_io::with_externalities;
-	use srml_support::{
+	use support::{
 		impl_outer_origin, impl_outer_dispatch, assert_noop, assert_ok, parameter_types,
 		traits::Contains
 	};

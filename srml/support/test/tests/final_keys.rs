@@ -14,9 +14,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Substrate.  If not, see <http://www.gnu.org/licenses/>.
 
-use runtime_io::{with_externalities, Blake2Hasher};
-use srml_support::{StorageValue, StorageMap, StorageDoubleMap};
-use srml_support::storage::unhashed;
+use runtime_io::with_externalities;
+use primitives::Blake2Hasher;
+use support::storage::unhashed;
 use codec::{Encode, Decode};
 
 pub trait Trait {
@@ -24,11 +24,11 @@ pub trait Trait {
 	type BlockNumber: Encode + Decode + Default + Clone;
 }
 
-srml_support::decl_module! {
+support::decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {}
 }
 
-srml_support::decl_storage!{
+support::decl_storage!{
 	trait Store for Module<T: Trait> as FinalKeys {
 		pub Value config(value): u32;
 
@@ -72,10 +72,14 @@ fn final_keys() {
 		k.extend(1u32.encode());
 		assert_eq!(unhashed::get::<u32>(&runtime_io::twox_128(&k)), Some(2u32));
 
+		let head = b"head of FinalKeys LinkedMap".to_vec();
+		assert_eq!(unhashed::get::<u32>(&runtime_io::blake2_256(&head)), None);
+
 		LinkedMap::insert(1, 2);
 		let mut k = b"FinalKeys LinkedMap".to_vec();
 		k.extend(1u32.encode());
 		assert_eq!(unhashed::get::<u32>(&runtime_io::blake2_256(&k)), Some(2u32));
+		assert_eq!(unhashed::get::<u32>(&runtime_io::blake2_256(&head)), Some(1u32));
 
 		LinkedMap2::insert(1, 2);
 		let mut k = b"FinalKeys LinkedMap2".to_vec();

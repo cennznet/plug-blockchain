@@ -113,9 +113,7 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> NetworkWorker
 	/// Returns a `NetworkWorker` that implements `Future` and must be regularly polled in order
 	/// for the network processing to advance. From it, you can extract a `NetworkService` using
 	/// `worker.service()`. The `NetworkService` can be shared through the codebase.
-	pub fn new(
-		params: Params<B, S, H>,
-	) -> Result<NetworkWorker<B, S, H>, Error> {
+	pub fn new(params: Params<B, S, H>) -> Result<NetworkWorker<B, S, H>, Error> {
 		let (to_worker, from_worker) = mpsc::unbounded();
 
 		if let Some(ref path) = params.network_config.net_config_path {
@@ -178,6 +176,7 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> NetworkWorker
 			params.finality_proof_request_builder,
 			params.protocol_id,
 			peerset_config,
+			params.block_announce_validator
 		)?;
 
 		// Build the swarm.
@@ -297,8 +296,8 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> NetworkWorker
 	}
 
 	/// You must call this when a new block is imported by the client.
-	pub fn on_block_imported(&mut self, hash: B::Hash, header: B::Header) {
-		self.network_service.user_protocol_mut().on_block_imported(hash, &header);
+	pub fn on_block_imported(&mut self, hash: B::Hash, header: B::Header, data: Vec<u8>, is_best: bool) {
+		self.network_service.user_protocol_mut().on_block_imported(hash, &header, data, is_best);
 	}
 
 	/// You must call this when a new block is finalized by the client.
@@ -394,8 +393,8 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> NetworkServic
 	///
 	/// In chain-based consensus, we often need to make sure non-best forks are
 	/// at least temporarily synced. This function forces such an announcement.
-	pub fn announce_block(&self, hash: B::Hash) {
-		let _ = self.to_worker.unbounded_send(ServerToWorkerMsg::AnnounceBlock(hash));
+	pub fn announce_block(&self, hash: B::Hash, data: Vec<u8>) {
+		let _ = self.to_worker.unbounded_send(ServerToWorkerMsg::AnnounceBlock(hash, data));
 	}
 
 	/// Send a consensus message through the gossip
@@ -580,7 +579,7 @@ impl<B, S, H> NetworkStateInfo for NetworkService<B, S, H>
 enum ServerToWorkerMsg<B: BlockT, S: NetworkSpecialization<B>> {
 	PropagateExtrinsics,
 	RequestJustification(B::Hash, NumberFor<B>),
-	AnnounceBlock(B::Hash),
+	AnnounceBlock(B::Hash, Vec<u8>),
 	ExecuteWithSpec(Box<dyn FnOnce(&mut S, &mut dyn Context<B>) + Send>),
 	ExecuteWithGossip(Box<dyn FnOnce(&mut ConsensusGossip<B>, &mut dyn Context<B>) + Send>),
 	GossipConsensusMessage(B::Hash, ConsensusEngineId, Vec<u8>, GossipMessageRecipient),
@@ -612,11 +611,11 @@ pub struct NetworkWorker<B: BlockT + 'static, S: NetworkSpecialization<B>, H: Ex
 	light_client_rqs: Option<mpsc::UnboundedReceiver<RequestData<B>>>,
 }
 
-impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> Future for NetworkWorker<B, S, H> {
-	type Item = ();
+impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> Stream for NetworkWorker<B, S, H> {
+	type Item = Event;
 	type Error = io::Error;
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+	fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
 		// Poll the import queue for actions to perform.
 		let _ = futures03::future::poll_fn(|cx| {
 			self.import_queue.poll_actions(cx, &mut NetworkLink {
@@ -636,7 +635,7 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> Future for Ne
 			// Process the next message coming from the `NetworkService`.
 			let msg = match self.from_worker.poll() {
 				Ok(Async::Ready(Some(msg))) => msg,
-				Ok(Async::Ready(None)) | Err(_) => return Ok(Async::Ready(())),
+				Ok(Async::Ready(None)) | Err(_) => return Ok(Async::Ready(None)),
 				Ok(Async::NotReady) => break,
 			};
 
@@ -653,8 +652,8 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> Future for Ne
 				}
 				ServerToWorkerMsg::GossipConsensusMessage(topic, engine_id, message, recipient) =>
 					self.network_service.user_protocol_mut().gossip_consensus_message(topic, engine_id, message, recipient),
-				ServerToWorkerMsg::AnnounceBlock(hash) =>
-					self.network_service.user_protocol_mut().announce_block(hash),
+				ServerToWorkerMsg::AnnounceBlock(hash, data) =>
+					self.network_service.user_protocol_mut().announce_block(hash, data),
 				ServerToWorkerMsg::RequestJustification(hash, number) =>
 					self.network_service.user_protocol_mut().request_justification(&hash, number),
 				ServerToWorkerMsg::PropagateExtrinsics =>
@@ -677,8 +676,9 @@ impl<B: BlockT + 'static, S: NetworkSpecialization<B>, H: ExHashT> Future for Ne
 				Ok(Async::Ready(Some(BehaviourOut::SubstrateAction(outcome)))) => outcome,
 				Ok(Async::Ready(Some(BehaviourOut::Dht(ev)))) => {
 					self.network_service.user_protocol_mut()
-						.on_event(Event::Dht(ev));
-					CustomMessageOutcome::None
+						.on_event(Event::Dht(ev.clone()));
+
+					return Ok(Async::Ready(Some(Event::Dht(ev))));
 				},
 				Ok(Async::Ready(None)) => CustomMessageOutcome::None,
 				Err(err) => {

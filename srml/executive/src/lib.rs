@@ -59,13 +59,13 @@
 //! # pub type Balances = u64;
 //! # pub type AllModules = u64;
 //! # pub enum Runtime {};
-//! # use sr_primitives::transaction_validity::TransactionValidity;
+//! # use sr_primitives::transaction_validity::{TransactionValidity, UnknownTransaction};
 //! # use sr_primitives::traits::ValidateUnsigned;
 //! # impl ValidateUnsigned for Runtime {
 //! # 	type Call = ();
 //! #
 //! # 	fn validate_unsigned(_call: &Self::Call) -> TransactionValidity {
-//! # 		TransactionValidity::Invalid(0)
+//! # 		UnknownTransaction::NoUnsignedValidator.into()
 //! # 	}
 //! # }
 //! /// Executive: handles dispatch to the various modules.
@@ -74,14 +74,15 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use rstd::prelude::*;
-use rstd::marker::PhantomData;
-use rstd::result;
-use sr_primitives::{generic::Digest, traits::{
-	self, Header, Zero, One, Checkable, Applyable, CheckEqual, OnFinalize,
-	OnInitialize, NumberFor, Block as BlockT, OffchainWorker, ValidateUnsigned
-}};
-use srml_support::Dispatchable;
+use rstd::{prelude::*, marker::PhantomData};
+use sr_primitives::{
+	generic::Digest, ApplyResult, weights::GetDispatchInfo,
+	traits::{
+		self, Header, Zero, One, Checkable, Applyable, CheckEqual, OnFinalize, OnInitialize,
+		NumberFor, Block as BlockT, OffchainWorker, ValidateUnsigned, Dispatchable
+	},
+	transaction_validity::TransactionValidity,
+};
 use codec::{Codec, Encode};
 use system::{extrinsics_root, DigestOf};
 use sr_primitives::{ApplyOutcome, ApplyError};
@@ -242,30 +243,19 @@ where
 	/// Apply extrinsic outside of the block execution function.
 	/// This doesn't attempt to validate anything regarding the block, but it builds a list of uxt
 	/// hashes.
-	pub fn apply_extrinsic(uxt: Block::Extrinsic) -> result::Result<ApplyOutcome, ApplyError> {
+	pub fn apply_extrinsic(uxt: Block::Extrinsic) -> ApplyResult {
 		let encoded = uxt.encode();
 		let encoded_len = encoded.len();
-		match Self::apply_extrinsic_with_len(uxt, encoded_len, Some(encoded)) {
-			Ok(internal::ApplyOutcome::Success) => Ok(ApplyOutcome::Success),
-			Ok(internal::ApplyOutcome::Fail(_)) => Ok(ApplyOutcome::Fail),
-			Err(internal::ApplyError::CantPay) => Err(ApplyError::CantPay),
-			Err(internal::ApplyError::BadSignature(_)) => Err(ApplyError::BadSignature),
-			Err(internal::ApplyError::Stale) => Err(ApplyError::Stale),
-			Err(internal::ApplyError::Future) => Err(ApplyError::Future),
-			Err(internal::ApplyError::FullBlock) => Err(ApplyError::FullBlock),
-		}
+		Self::apply_extrinsic_with_len(uxt, encoded_len, Some(encoded))
 	}
 
 	/// Apply an extrinsic inside the block execution function.
 	fn apply_extrinsic_no_note(uxt: Block::Extrinsic) {
 		let l = uxt.encode().len();
 		match Self::apply_extrinsic_with_len(uxt, l, None) {
-			Ok(internal::ApplyOutcome::Success) => (),
-			Ok(internal::ApplyOutcome::Fail(e)) => runtime_io::print(e),
-			Err(internal::ApplyError::CantPay) => panic!("All extrinsics should have sender able to pay their fees"),
-			Err(internal::ApplyError::BadSignature(_)) => panic!("All extrinsics should be properly signed"),
-			Err(internal::ApplyError::Stale) | Err(internal::ApplyError::Future) => panic!("All extrinsics should have the correct nonce"),
-			Err(internal::ApplyError::FullBlock) => panic!("Extrinsics should not exceed block limit"),
+			Ok(Ok(())) => (),
+			Ok(Err(e)) => sr_primitives::print(e),
+			Err(e) => { let err: &'static str = e.into(); panic!(err) },
 		}
 	}
 
@@ -274,9 +264,9 @@ where
 		uxt: Block::Extrinsic,
 		encoded_len: usize,
 		to_note: Option<Vec<u8>>,
-	) -> result::Result<internal::ApplyOutcome, internal::ApplyError> {
+	) -> ApplyResult {
 		// Verify that the signature is good.
-		let xt = uxt.check(&Default::default()).map_err(internal::ApplyError::BadSignature)?;
+		let xt = uxt.check(&Default::default())?;
 
 		// We don't need to make sure to `note_extrinsic` only after we know it's going to be
 		// executed to prevent it from leaking in storage since at this point, it will either
@@ -289,15 +279,11 @@ where
 
 		// Decode parameters and dispatch
 		let dispatch_info = xt.get_dispatch_info();
-		let r = Applyable::dispatch(xt, dispatch_info, encoded_len)
-			.map_err(internal::ApplyError::from)?;
+		let r = Applyable::apply(xt, dispatch_info, encoded_len)?;
 
 		<system::Module<System>>::note_applied_extrinsic(&r, encoded_len as u32);
 
-		r.map(|_| internal::ApplyOutcome::Success).or_else(|e| match e {
-			sr_primitives::BLOCK_FULL => Err(internal::ApplyError::FullBlock),
-			e => Ok(internal::ApplyOutcome::Fail(e))
-		})
+		Ok(r)
 	}
 
 	fn final_checks(header: &System::Header) {
@@ -327,21 +313,8 @@ where
 	///
 	/// Changes made to storage should be discarded.
 	pub fn validate_transaction(uxt: Block::Extrinsic) -> TransactionValidity {
-		// Note errors > 0 are from ApplyError
-		const UNKNOWN_ERROR: i8 = -127;
-		const INVALID_INDEX: i8 = -10;
-
 		let encoded_len = uxt.using_encoded(|d| d.len());
-		let xt = match uxt.check(&Default::default()) {
-			// Checks out. Carry on.
-			Ok(xt) => xt,
-			// An unknown account index implies that the transaction may yet become valid.
-			Err("invalid account index") => return TransactionValidity::Unknown(INVALID_INDEX),
-			// Technically a bad signature could also imply an out-of-date account index, but
-			// that's more of an edge case.
-			Err(sr_primitives::BAD_SIGNATURE) => return TransactionValidity::Invalid(ApplyError::BadSignature as i8),
-			Err(_) => return TransactionValidity::Invalid(UNKNOWN_ERROR),
-		};
+		let xt = uxt.check(&Default::default())?;
 
 		let dispatch_info = xt.get_dispatch_info();
 		xt.validate::<UnsignedValidator>(dispatch_info, encoded_len)

@@ -42,7 +42,7 @@
 //! ## Usage
 //!
 //! ```
-//! use srml_support::{decl_module, dispatch::Result};
+//! use support::{decl_module, dispatch::Result};
 //! use system::ensure_signed;
 //! use srml_im_online::{self as im_online};
 //!
@@ -67,54 +67,85 @@
 // Ensure we're `no_std` when compiling for Wasm.
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod mock;
+mod tests;
+
 use app_crypto::RuntimeAppPublic;
 use codec::{Encode, Decode};
 use primitives::offchain::{OpaqueNetworkState, StorageKind};
 use rstd::prelude::*;
 use session::historical::IdentificationTuple;
-use sr_io::Printable;
 use sr_primitives::{
-	Perbill, ApplyError,
-	traits::{Extrinsic as ExtrinsicT, Convert},
-	transaction_validity::{TransactionValidity, TransactionLongevity, ValidTransaction},
+	traits::{Convert, Member, Printable}, Perbill,
+	transaction_validity::{
+		TransactionValidity, TransactionLongevity, ValidTransaction, InvalidTransaction,
+	},
 };
 use sr_staking_primitives::{
-	SessionIndex, CurrentElectedSet,
+	SessionIndex,
 	offence::{ReportOffence, Offence, Kind},
 };
-use srml_support::{
-	StorageValue, decl_module, decl_event, decl_storage, StorageDoubleMap, print, ensure
+use support::{
+	decl_module, decl_event, decl_storage, print, ensure, Parameter
 };
 use system::ensure_none;
+use system::offchain::SubmitUnsignedTransaction;
 
-mod app {
-	pub use app_crypto::sr25519 as crypto;
-	use app_crypto::{app_crypto, key_types::IM_ONLINE, sr25519};
+pub mod sr25519 {
+	mod app_sr25519 {
+		use app_crypto::{app_crypto, key_types::IM_ONLINE, sr25519};
+		app_crypto!(sr25519, IM_ONLINE);
 
-	app_crypto!(sr25519, IM_ONLINE);
+		impl From<Signature> for sr_primitives::AnySignature {
+			fn from(sig: Signature) -> Self {
+				sr25519::Signature::from(sig).into()
+			}
+		}
+	}
+
+	/// An i'm online keypair using sr25519 as its crypto.
+	#[cfg(feature = "std")]
+	pub type AuthorityPair = app_sr25519::Pair;
+
+	/// An i'm online signature using sr25519 as its crypto.
+	pub type AuthoritySignature = app_sr25519::Signature;
+
+	/// An i'm online identifier using sr25519 as its crypto.
+	pub type AuthorityId = app_sr25519::Public;
 }
 
-/// A Babe authority keypair. Necessarily equivalent to the schnorrkel public key used in
-/// the main Babe module. If that ever changes, then this must, too.
-#[cfg(feature = "std")]
-pub type AuthorityPair = app::Pair;
+pub mod ed25519 {
+	mod app_ed25519 {
+		use app_crypto::{app_crypto, key_types::IM_ONLINE, ed25519};
+		app_crypto!(ed25519, IM_ONLINE);
 
-/// A Babe authority signature.
-pub type AuthoritySignature = app::Signature;
+		impl From<Signature> for sr_primitives::AnySignature {
+			fn from(sig: Signature) -> Self {
+				ed25519::Signature::from(sig).into()
+			}
+		}
+	}
 
-/// A Babe authority identifier. Necessarily equivalent to the schnorrkel public key used in
-/// the main Babe module. If that ever changes, then this must, too.
-pub type AuthorityId = app::Public;
+	/// An i'm online keypair using ed25519 as its crypto.
+	#[cfg(feature = "std")]
+	pub type AuthorityPair = app_ed25519::Pair;
 
-// The local storage database key under which the worker progress status
-// is tracked.
+	/// An i'm online signature using ed25519 as its crypto.
+	pub type AuthoritySignature = app_ed25519::Signature;
+
+	/// An i'm online identifier using ed25519 as its crypto.
+	pub type AuthorityId = app_ed25519::Public;
+}
+
+/// The local storage database key under which the worker progress status
+/// is tracked.
 const DB_KEY: &[u8] = b"srml/im-online-worker-status";
 
-// It's important to persist the worker state, since e.g. the
-// server could be restarted while starting the gossip process, but before
-// finishing it. With every execution of the off-chain worker we check
-// if we need to recover and resume gossipping or if there is already
-// another off-chain worker in the process of gossipping.
+/// It's important to persist the worker state, since e.g. the
+/// server could be restarted while starting the gossip process, but before
+/// finishing it. With every execution of the off-chain worker we check
+/// if we need to recover and resume gossipping or if there is already
+/// another off-chain worker in the process of gossipping.
 #[derive(Encode, Decode, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(Debug))]
 struct WorkerStatus<BlockNumber> {
@@ -122,20 +153,19 @@ struct WorkerStatus<BlockNumber> {
 	gossipping_at: BlockNumber,
 }
 
-// Error which may occur while executing the off-chain code.
+/// Error which may occur while executing the off-chain code.
+#[cfg_attr(feature = "std", derive(Debug))]
 enum OffchainErr {
 	DecodeWorkerStatus,
-	ExtrinsicCreation,
 	FailedSigning,
 	NetworkState,
 	SubmitTransaction,
 }
 
 impl Printable for OffchainErr {
-	fn print(self) {
+	fn print(&self) {
 		match self {
 			OffchainErr::DecodeWorkerStatus => print("Offchain error: decoding WorkerStatus failed!"),
-			OffchainErr::ExtrinsicCreation => print("Offchain error: extrinsic creation failed!"),
 			OffchainErr::FailedSigning => print("Offchain error: signing failed!"),
 			OffchainErr::NetworkState => print("Offchain error: fetching network state failed!"),
 			OffchainErr::SubmitTransaction => print("Offchain error: submitting transaction failed!"),
@@ -158,15 +188,17 @@ pub struct Heartbeat<BlockNumber>
 }
 
 pub trait Trait: system::Trait + session::historical::Trait {
-	/// The overarching event type.
-	type Event: From<Event> + Into<<Self as system::Trait>::Event>;
+	/// The identifier type for an authority.
+	type AuthorityId: Member + Parameter + RuntimeAppPublic + Default + Ord;
 
-	/// The function call.
+	/// The overarching event type.
+	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+
+	/// A dispatchable call type.
 	type Call: From<Call<Self>>;
 
-	/// A extrinsic right from the external world. This is unchecked and so
-	/// can contain a signature.
-	type UncheckedExtrinsic: ExtrinsicT<Call=<Self as Trait>::Call> + Encode + Decode;
+	/// A transaction submitter.
+	type SubmitTransaction: SubmitUnsignedTransaction<Self, <Self as Trait>::Call>;
 
 	/// A type that gives us the ability to submit unresponsiveness offence reports.
 	type ReportUnresponsiveness:
@@ -175,13 +207,12 @@ pub trait Trait: system::Trait + session::historical::Trait {
 			IdentificationTuple<Self>,
 			UnresponsivenessOffence<IdentificationTuple<Self>>,
 		>;
-
-	/// A type that returns a validator id from the current elected set of the era.
-	type CurrentElectedSet: CurrentElectedSet<<Self as session::Trait>::ValidatorId>;
 }
 
 decl_event!(
-	pub enum Event {
+	pub enum Event<T> where
+		<T as Trait>::AuthorityId,
+	{
 		/// A new heartbeat was received from `AuthorityId`
 		HeartbeatReceived(AuthorityId),
 	}
@@ -193,7 +224,7 @@ decl_storage! {
 		GossipAt get(gossip_at): T::BlockNumber;
 
 		/// The current set of keys that may issue a heartbeat.
-		Keys get(keys): Vec<AuthorityId>;
+		Keys get(keys): Vec<T::AuthorityId>;
 
 		/// For each session index we keep a mapping of `AuthorityId`
 		/// to `offchain::OpaqueNetworkState`.
@@ -201,16 +232,8 @@ decl_storage! {
 			blake2_256(AuthIndex) => Vec<u8>;
 	}
 	add_extra_genesis {
-		config(keys): Vec<AuthorityId>;
-		build(|
-			storage: &mut (sr_primitives::StorageOverlay, sr_primitives::ChildrenStorageOverlay),
-			config: &GenesisConfig
-		| {
-			sr_io::with_storage(
-				storage,
-				|| Module::<T>::initialize_keys(&config.keys),
-			);
-		})
+		config(keys): Vec<T::AuthorityId>;
+		build(|config| Module::<T>::initialize_keys(&config.keys))
 	}
 }
 
@@ -222,7 +245,7 @@ decl_module! {
 		fn heartbeat(
 			origin,
 			heartbeat: Heartbeat<T::BlockNumber>,
-			signature: AuthoritySignature
+			signature: <T::AuthorityId as RuntimeAppPublic>::Signature
 		) {
 			ensure_none(origin)?;
 
@@ -232,7 +255,7 @@ decl_module! {
 				&current_session,
 				&heartbeat.authority_index
 			);
-			let keys = Keys::get();
+			let keys = Keys::<T>::get();
 			let public = keys.get(heartbeat.authority_index as usize);
 			if let (true, Some(public)) = (!exists, public) {
 				let signature_valid = heartbeat.using_encoded(|encoded_heartbeat| {
@@ -240,7 +263,7 @@ decl_module! {
 				});
 				ensure!(signature_valid, "Invalid heartbeat signature.");
 
-				Self::deposit_event(Event::HeartbeatReceived(public.clone()));
+				Self::deposit_event(Event::<T>::HeartbeatReceived(public.clone()));
 
 				let network_state = heartbeat.network_state.encode();
 				<ReceivedHeartbeats>::insert(
@@ -248,13 +271,17 @@ decl_module! {
 					&heartbeat.authority_index,
 					&network_state
 				);
+			} else if exists {
+				Err("Duplicated heartbeat.")?
+			} else {
+				Err("Non existent public key.")?
 			}
 		}
 
 		// Runs after every block.
 		fn offchain_worker(now: T::BlockNumber) {
 			// Only send messages if we are a potential validator.
-			if sr_io::is_validator() {
+			if runtime_io::is_validator() {
 				Self::offchain(now);
 			}
 		}
@@ -269,7 +296,7 @@ impl<T: Trait> Module<T> {
 		<ReceivedHeartbeats>::exists(&current_session, &authority_index)
 	}
 
-	fn offchain(now: T::BlockNumber) {
+	pub(crate) fn offchain(now: T::BlockNumber) {
 		let next_gossip = <GossipAt<T>>::get();
 		let check = Self::check_not_yet_gossipped(now, next_gossip);
 		let (curr_worker_status, not_yet_gossipped) = match check {
@@ -297,8 +324,8 @@ impl<T: Trait> Module<T> {
 
 	fn do_gossip_at(block_number: T::BlockNumber) -> Result<(), OffchainErr> {
 		// we run only when a local authority key is configured
-		let authorities = Keys::get();
-		let mut local_keys = app::Public::all();
+		let authorities = Keys::<T>::get();
+		let mut local_keys = T::AuthorityId::all();
 		local_keys.sort();
 
 		for (authority_index, key) in authorities.into_iter()
@@ -309,7 +336,7 @@ impl<T: Trait> Module<T> {
 					.map(|location| (index as u32, &local_keys[location]))
 			})
 		{
-			let network_state = sr_io::network_state().map_err(|_| OffchainErr::NetworkState)?;
+			let network_state = runtime_io::network_state().map_err(|_| OffchainErr::NetworkState)?;
 			let heartbeat_data = Heartbeat {
 				block_number,
 				network_state,
@@ -319,9 +346,8 @@ impl<T: Trait> Module<T> {
 
 			let signature = key.sign(&heartbeat_data.encode()).ok_or(OffchainErr::FailedSigning)?;
 			let call = Call::heartbeat(heartbeat_data, signature);
-			let ex = T::UncheckedExtrinsic::new_unsigned(call.into())
-				.ok_or(OffchainErr::ExtrinsicCreation)?;
-			sr_io::submit_transaction(&ex).map_err(|_| OffchainErr::SubmitTransaction)?;
+			T::SubmitTransaction::submit_unsigned(call)
+				.map_err(|_| OffchainErr::SubmitTransaction)?;
 
 			// once finished we set the worker status without comparing
 			// if the existing value changed in the meantime. this is
@@ -340,7 +366,7 @@ impl<T: Trait> Module<T> {
 			done,
 			gossipping_at,
 		};
-		sr_io::local_storage_compare_and_set(
+		runtime_io::local_storage_compare_and_set(
 			StorageKind::PERSISTENT,
 			DB_KEY,
 			curr_worker_status.as_ref().map(Vec::as_slice),
@@ -356,7 +382,7 @@ impl<T: Trait> Module<T> {
 			done,
 			gossipping_at,
 		};
-		sr_io::local_storage_set(
+		runtime_io::local_storage_set(
 			StorageKind::PERSISTENT, DB_KEY, &enc.encode());
 	}
 
@@ -367,7 +393,7 @@ impl<T: Trait> Module<T> {
 		now: T::BlockNumber,
 		next_gossip: T::BlockNumber,
 	) -> Result<(Option<Vec<u8>>, bool), OffchainErr> {
-		let last_gossip = sr_io::local_storage_get(StorageKind::PERSISTENT, DB_KEY);
+		let last_gossip = runtime_io::local_storage_get(StorageKind::PERSISTENT, DB_KEY);
 		match last_gossip {
 			Some(last) => {
 				let worker_status: WorkerStatus<T::BlockNumber> = Decode::decode(&mut &last[..])
@@ -389,27 +415,27 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
-	fn initialize_keys(keys: &[AuthorityId]) {
+	fn initialize_keys(keys: &[T::AuthorityId]) {
 		if !keys.is_empty() {
-			assert!(Keys::get().is_empty(), "Keys are already initialized!");
-			Keys::put_ref(keys);
+			assert!(Keys::<T>::get().is_empty(), "Keys are already initialized!");
+			Keys::<T>::put_ref(keys);
 		}
 	}
 }
 
 impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 
-	type Key = AuthorityId;
+	type Key = T::AuthorityId;
 
 	fn on_genesis_session<'a, I: 'a>(validators: I)
-		where I: Iterator<Item=(&'a T::AccountId, AuthorityId)>
+		where I: Iterator<Item=(&'a T::AccountId, T::AuthorityId)>
 	{
 		let keys = validators.map(|x| x.1).collect::<Vec<_>>();
 		Self::initialize_keys(&keys);
 	}
 
 	fn on_new_session<'a, I: 'a>(_changed: bool, validators: I, _queued_validators: I)
-		where I: Iterator<Item=(&'a T::AccountId, AuthorityId)>
+		where I: Iterator<Item=(&'a T::AccountId, T::AuthorityId)>
 	{
 		// Reset heartbeats
 		<ReceivedHeartbeats>::remove_prefix(&<session::Module<T>>::current_index());
@@ -418,7 +444,7 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 		<GossipAt<T>>::put(<system::Module<T>>::block_number());
 
 		// Remember who the authorities are for the new session.
-		Keys::put(validators.map(|x| x.1).collect::<Vec<_>>());
+		Keys::<T>::put(validators.map(|x| x.1).collect::<Vec<_>>());
 	}
 
 	fn on_before_session_ending() {
@@ -426,20 +452,17 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 
 		let current_session = <session::Module<T>>::current_index();
 
-		let keys = Keys::get();
-		let current_elected = T::CurrentElectedSet::current_elected_set();
+		let keys = Keys::<T>::get();
+		let current_validators = <session::Module<T>>::validators();
 
-		// The invariant is that these two are of the same length.
-		// TODO: What to do: Uncomment, ignore, a third option?
-		// assert_eq!(keys.len(), current_elected.len());
-
-		for (auth_idx, validator_id) in current_elected.into_iter().enumerate() {
+		for (auth_idx, validator_id) in current_validators.into_iter().enumerate() {
 			let auth_idx = auth_idx as u32;
-			if !<ReceivedHeartbeats>::exists(&current_session, &auth_idx) {
+			let exists = <ReceivedHeartbeats>::exists(&current_session, &auth_idx);
+			if !exists {
 				let full_identification = T::FullIdentificationOf::convert(validator_id.clone())
 					.expect(
-						"we got the validator_id from current_elected;
-						current_elected is set of currently elected validators;
+						"we got the validator_id from current_validators;
+						current_validators is set of currently acting validators;
 						the mapping between the validator id and its full identification should be valid;
 						thus `FullIdentificationOf::convert` can't return `None`;
 						qed",
@@ -447,6 +470,10 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 
 				unresponsive.push((validator_id, full_identification));
 			}
+		}
+
+		if unresponsive.is_empty() {
+			return;
 		}
 
 		let validator_set_count = keys.len() as u32;
@@ -464,27 +491,27 @@ impl<T: Trait> session::OneSessionHandler<T::AccountId> for Module<T> {
 	}
 }
 
-impl<T: Trait> srml_support::unsigned::ValidateUnsigned for Module<T> {
+impl<T: Trait> support::unsigned::ValidateUnsigned for Module<T> {
 	type Call = Call<T>;
 
-	fn validate_unsigned(call: &Self::Call) -> srml_support::unsigned::TransactionValidity {
+	fn validate_unsigned(call: &Self::Call) -> TransactionValidity {
 		if let Call::heartbeat(heartbeat, signature) = call {
 			if <Module<T>>::is_online_in_current_session(heartbeat.authority_index) {
 				// we already received a heartbeat for this authority
-				return TransactionValidity::Invalid(ApplyError::Stale as i8);
+				return InvalidTransaction::Stale.into();
 			}
 
 			// check if session index from heartbeat is recent
 			let current_session = <session::Module<T>>::current_index();
 			if heartbeat.session_index != current_session {
-				return TransactionValidity::Invalid(ApplyError::Stale as i8);
+				return InvalidTransaction::Stale.into();
 			}
 
 			// verify that the incoming (unverified) pubkey is actually an authority id
-			let keys = Keys::get();
+			let keys = Keys::<T>::get();
 			let authority_id = match keys.get(heartbeat.authority_index as usize) {
 				Some(id) => id,
-				None => return TransactionValidity::Invalid(ApplyError::BadSignature as i8),
+				None => return InvalidTransaction::BadProof.into(),
 			};
 
 			// check signature (this is expensive so we do it last).
@@ -493,23 +520,24 @@ impl<T: Trait> srml_support::unsigned::ValidateUnsigned for Module<T> {
 			});
 
 			if !signature_valid {
-				return TransactionValidity::Invalid(ApplyError::BadSignature as i8);
+				return InvalidTransaction::BadProof.into();
 			}
 
-			return TransactionValidity::Valid(ValidTransaction {
+			Ok(ValidTransaction {
 				priority: 0,
 				requires: vec![],
 				provides: vec![(current_session, authority_id).encode()],
 				longevity: TransactionLongevity::max_value(),
 				propagate: true,
 			})
+		} else {
+			InvalidTransaction::Call.into()
 		}
-
-		TransactionValidity::Invalid(0)
 	}
 }
 
 /// An offence that is filed if a validator didn't send a heartbeat message.
+#[cfg_attr(feature = "std", derive(Clone, Debug, PartialEq, Eq))]
 pub struct UnresponsivenessOffence<Offender> {
 	/// The current session index in which we report the unresponsive validators.
 	///
@@ -552,30 +580,5 @@ impl<Offender: Clone> Offence<Offender> for UnresponsivenessOffence<Offender> {
 		// TODO: #3189 should fix this.
 		let p = (x.into_parts() as u64 * 50_000_000u64) / 1_000_000_000u64;
 		Perbill::from_parts(p as u32)
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-
-	#[test]
-	fn test_unresponsiveness_slash_fraction() {
-		// A single case of unresponsiveness is not slashed.
-		assert_eq!(
-			UnresponsivenessOffence::<()>::slash_fraction(1, 50),
-			Perbill::zero(),
-		);
-
-		assert_eq!(
-			UnresponsivenessOffence::<()>::slash_fraction(3, 50),
-			Perbill::from_parts(6000000), // 0.6%
-		);
-
-		// One third offline should be punished around 5%.
-		assert_eq!(
-			UnresponsivenessOffence::<()>::slash_fraction(17, 50),
-			Perbill::from_parts(48000000), // 4.8%
-		);
 	}
 }

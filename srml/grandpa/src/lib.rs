@@ -32,9 +32,8 @@ pub use substrate_finality_grandpa_primitives as fg_primitives;
 
 use rstd::prelude::*;
 use codec::{self as codec, Encode, Decode, Error};
-use srml_support::{
+use support::{
 	decl_event, decl_storage, decl_module, dispatch::Result,
-	storage::StorageValue, storage::StorageMap,
 };
 use sr_primitives::{
 	generic::{DigestItem, OpaqueDigestItemId}, traits::Zero,
@@ -162,15 +161,7 @@ decl_storage! {
 	}
 	add_extra_genesis {
 		config(authorities): Vec<(AuthorityId, AuthorityWeight)>;
-		build(|
-			storage: &mut (sr_primitives::StorageOverlay, sr_primitives::ChildrenStorageOverlay),
-			config: &GenesisConfig
-		| {
-			runtime_io::with_storage(
-				storage,
-				|| Module::<T>::initialize_authorities(&config.authorities),
-			);
-		})
+		build(|config| Module::<T>::initialize_authorities(&config.authorities))
 	}
 }
 
@@ -255,6 +246,8 @@ impl<T: Trait> Module<T> {
 		Authorities::get()
 	}
 
+	/// Schedule GRANDPA to pause starting in the given number of blocks.
+	/// Cannot be done when already paused.
 	pub fn schedule_pause(in_blocks: T::BlockNumber) -> Result {
 		if let StoredState::Live = <State<T>>::get() {
 			let scheduled_at = <system::Module<T>>::block_number();
@@ -270,6 +263,7 @@ impl<T: Trait> Module<T> {
 		}
 	}
 
+	/// Schedule a resume of GRANDPA after pausing.
 	pub fn schedule_resume(in_blocks: T::BlockNumber) -> Result {
 		if let StoredState::Paused = <State<T>>::get() {
 			let scheduled_at = <system::Module<T>>::block_number();

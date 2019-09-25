@@ -21,15 +21,14 @@ use parking_lot::RwLock;
 
 use kvdb::{KeyValueDB, DBTransaction};
 
-use client::blockchain::Cache as BlockchainCache;
+use client::blockchain::{well_known_cache_keys::{self, Id as CacheKeyId}, Cache as BlockchainCache};
 use client::error::Result as ClientResult;
 use codec::{Encode, Decode};
 use sr_primitives::generic::BlockId;
 use sr_primitives::traits::{Block as BlockT, Header as HeaderT, NumberFor, Zero};
-use consensus_common::well_known_cache_keys::Id as CacheKeyId;
 use crate::utils::{self, COLUMN_META, db_err};
 
-use self::list_cache::ListCache;
+use self::list_cache::{ListCache, PruningStrategy};
 
 mod list_cache;
 mod list_entry;
@@ -166,7 +165,7 @@ fn get_cache_helper<'a, Block: BlockT>(
 					cache,
 				},
 			),
-			PRUNE_DEPTH.into(),
+			cache_pruning_strategy(name),
 			best_finalized_block.clone(),
 		)
 	})
@@ -299,8 +298,8 @@ impl<Block: BlockT> BlockchainCache<Block> for DbCacheSync<Block> {
 		key: &CacheKeyId,
 		at: &BlockId<Block>,
 	) -> Option<((NumberFor<Block>, Block::Hash), Option<(NumberFor<Block>, Block::Hash)>, Vec<u8>)> {
-		let cache = self.0.read();
-		let storage = cache.cache_at.get(key)?.storage();
+		let mut cache = self.0.write();
+		let storage = cache.get_cache(*key).storage();
 		let db = storage.db();
 		let columns = storage.columns();
 		let at = match *at {
@@ -332,5 +331,20 @@ impl<Block: BlockT> BlockchainCache<Block> for DbCacheSync<Block> {
 					value,
 				)))
 			.ok()?
+	}
+}
+
+/// Get pruning strategy for given cache.
+fn cache_pruning_strategy<N: From<u32>>(cache: CacheKeyId) -> PruningStrategy<N> {
+	// the cache is mostly used to store data from consensus engines
+	// this kind of data is only required for non-finalized blocks
+	// => by default we prune finalized cached entries
+
+	match cache {
+		// we need to keep changes tries configurations forever (or at least until changes tries,
+		// that were built using this configuration, are pruned) to make it possible to refer
+		// to old changes tries
+		well_known_cache_keys::CHANGES_TRIE_CONFIG => PruningStrategy::NeverPrune,
+		_ => PruningStrategy::ByDepth(PRUNE_DEPTH.into()),
 	}
 }

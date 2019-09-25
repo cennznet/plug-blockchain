@@ -18,7 +18,7 @@
 
 use super::*;
 use std::cell::RefCell;
-use srml_support::{impl_outer_origin, parameter_types};
+use support::{impl_outer_origin, parameter_types};
 use primitives::{crypto::key_types::DUMMY, H256};
 use sr_primitives::{
 	Perbill, impl_opaque_keys, traits::{BlakeTwo256, IdentityLookup, ConvertInto},
@@ -53,6 +53,8 @@ thread_local! {
 	pub static SESSION_CHANGED: RefCell<bool> = RefCell::new(false);
 	pub static TEST_SESSION_CHANGED: RefCell<bool> = RefCell::new(false);
 	pub static DISABLED: RefCell<bool> = RefCell::new(false);
+	// Stores if `on_before_session_end` was called
+	pub static BEFORE_SESSION_END_CALLED: RefCell<bool> = RefCell::new(false);
 }
 
 pub struct TestShouldEndSession;
@@ -80,6 +82,9 @@ impl SessionHandler<u64> for TestSessionHandler {
 	}
 	fn on_disabled(_validator_index: usize) {
 		DISABLED.with(|l| *l.borrow_mut() = true)
+	}
+	fn on_before_session_ending() {
+		BEFORE_SESSION_END_CALLED.with(|b| *b.borrow_mut() = true);
 	}
 }
 
@@ -134,8 +139,17 @@ pub fn set_next_validators(next: Vec<u64>) {
 	NEXT_VALIDATORS.with(|v| *v.borrow_mut() = next);
 }
 
+pub fn before_session_end_called() -> bool {
+	BEFORE_SESSION_END_CALLED.with(|b| *b.borrow())
+}
+
+pub fn reset_before_session_end_called() {
+	BEFORE_SESSION_END_CALLED.with(|b| *b.borrow_mut() = false);
+}
+
 #[derive(Clone, Eq, PartialEq)]
 pub struct Test;
+
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
 	pub const MaximumBlockWeight: u32 = 1024;
@@ -171,6 +185,10 @@ impl timestamp::Trait for Test {
 	type MinimumPeriod = MinimumPeriod;
 }
 
+parameter_types! {
+	pub const DisabledValidatorsThreshold: Perbill = Perbill::from_percent(33);
+}
+
 impl Trait for Test {
 	type ShouldEndSession = TestShouldEndSession;
 	#[cfg(feature = "historical")]
@@ -183,6 +201,7 @@ impl Trait for Test {
 	type Keys = MockSessionKeys;
 	type Event = ();
 	type SelectInitialValidators = ();
+	type DisabledValidatorsThreshold = DisabledValidatorsThreshold;
 }
 
 #[cfg(feature = "historical")]
