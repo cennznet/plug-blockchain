@@ -38,10 +38,9 @@ use rstd::ops::{
 	Add, Sub, Mul, Div, Rem, AddAssign, SubAssign, MulAssign, DivAssign,
 	RemAssign, Shl, Shr
 };
-pub use doughnut::traits::DoughnutApi;
-use crate::AppKey;
 use app_crypto::AppKey;
 use impl_trait_for_tuples::impl_for_tuples;
+pub use doughnut::traits::DoughnutApi;
 
 /// A lazy value.
 pub trait Lazy<T: ?Sized> {

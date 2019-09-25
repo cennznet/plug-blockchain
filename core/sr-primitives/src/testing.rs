@@ -426,18 +426,15 @@ pub mod doughnut {
 
 	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>{
 		type Checked = Self;
-		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
+		fn check(self, _: &Context) -> Result<Self::Checked, TransactionValidityError> { Ok(self) }
 	}
 
 	impl<Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<Call, Extra> {
 		type Call = Call;
+		type SignaturePayload = ();
 
 		fn is_signed(&self) -> Option<bool> {
 			Some(self.sender.is_some())
-		}
-
-		fn new_unsigned(_c: Call) -> Option<Self> {
-			None
 		}
 	}
 
@@ -456,15 +453,15 @@ pub mod doughnut {
 			_info: DispatchInfo,
 			_len: usize,
 		) -> TransactionValidity {
-			TransactionValidity::Valid(Default::default())
+			Ok(Default::default())
 		}
 
 		/// Executes all necessary logic needed prior to dispatch and deconstructs into function call,
 		/// index and sender.
-		fn dispatch(self,
+		fn apply(self,
 			info: DispatchInfo,
 			len: usize,
-		) -> Result<DispatchResult, DispatchError> {
+		) -> ApplyResult {
 			let maybe_who = if let (Some(who), Some(extra)) = (self.sender, self.doughnut) {
 				Extra::pre_dispatch(extra, &who, &self.function, info, len)?;
 				Some(who)
@@ -472,7 +469,7 @@ pub mod doughnut {
 				Extra::pre_dispatch_unsigned(&self.function, info, len)?;
 				None
 			};
-			Ok(self.function.dispatch(maybe_who.into()))
+			Ok(self.function.dispatch(maybe_who.into()).map_err(Into::into))
 		}
 	}
 
