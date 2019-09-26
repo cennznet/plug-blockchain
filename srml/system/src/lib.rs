@@ -110,9 +110,9 @@ use sr_primitives::{
 };
 
 use primitives::storage::well_known_keys;
-use srml_support::{
-	storage, decl_module, decl_event, decl_storage, StorageDoubleMap, StorageValue, StorageMap,
-	Parameter, for_each_tuple, traits::{Contains, Get},
+use support::{
+	storage, decl_module, decl_event, decl_error, decl_storage, StorageDoubleMap, StorageValue, StorageMap,
+	Parameter, traits::{Contains, Get},
 	additional_traits::DispatchVerifier as DispatchVerifierT,
 };
 use safe_mix::TripletMix;
@@ -239,11 +239,6 @@ pub type KeyValue = (Vec<u8>, Vec<u8>);
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
 		type Error = Error;
-
-		/// Deposits an event into this block's event record.
-		pub fn deposit_event(event: T::Event) {
-			Self::deposit_event_indexed(&[], event);
-		}
 
 		/// A big dispatch that will disallow any other transaction to be included.
 		// TODO: this must be preferable available for testing really (not possible at the moment).

@@ -85,43 +85,41 @@ use sr_primitives::{
 };
 use codec::{Codec, Encode};
 use system::{extrinsics_root, DigestOf};
-use sr_primitives::{ApplyOutcome, ApplyError};
-use sr_primitives::transaction_validity::TransactionValidity;
-use sr_primitives::weights::GetDispatchInfo;
+// use sr_primitives::{ApplyOutcome, ApplyError};
 
 //mod doughnut;
 //pub use doughnut::DoughnutExecutive;
 
-mod internal {
-	use sr_primitives::traits::DispatchError;
+// mod internal {
+// 	use sr_primitives::DispatchError;
 
-	pub enum ApplyError {
-		BadSignature(&'static str),
-		Stale,
-		Future,
-		CantPay,
-		FullBlock,
-	}
+// 	pub enum ApplyError {
+// 		BadSignature(&'static str),
+// 		Stale,
+// 		Future,
+// 		CantPay,
+// 		FullBlock,
+// 	}
 
-	pub enum ApplyOutcome {
-		Success,
-		Fail(&'static str),
-	}
+// 	pub enum ApplyOutcome {
+// 		Success,
+// 		Fail(&'static str),
+// 	}
 
-	impl From<DispatchError> for ApplyError {
-		fn from(d: DispatchError) -> Self {
-			match d {
-				DispatchError::Payment => ApplyError::CantPay,
-				DispatchError::Exhausted => ApplyError::FullBlock,
-				DispatchError::NoPermission => ApplyError::CantPay,
-				DispatchError::BadState => ApplyError::CantPay,
-				DispatchError::Stale => ApplyError::Stale,
-				DispatchError::Future => ApplyError::Future,
-				DispatchError::BadProof => ApplyError::BadSignature(""),
-			}
-		}
-	}
-}
+// 	impl From<DispatchError> for ApplyError {
+// 		fn from(d: DispatchError) -> Self {
+// 			match d {
+// 				DispatchError::Payment => ApplyError::CantPay,
+// 				DispatchError::Exhausted => ApplyError::FullBlock,
+// 				DispatchError::NoPermission => ApplyError::CantPay,
+// 				DispatchError::BadState => ApplyError::CantPay,
+// 				DispatchError::Stale => ApplyError::Stale,
+// 				DispatchError::Future => ApplyError::Future,
+// 				DispatchError::BadProof => ApplyError::BadSignature(""),
+// 			}
+// 		}
+// 	}
+// }
 
 /// Trait that can be used to execute a block.
 pub trait ExecuteBlock<Block: BlockT> {
