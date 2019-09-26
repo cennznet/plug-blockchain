@@ -31,7 +31,6 @@ pub use sr_primitives::{
 		TransactionPriority
 	}, traits::{Dispatchable, DispatchResult, ModuleDispatchError}, DispatchError
 };
-pub use sr_primitives::traits::{Dispatchable, DispatchResult};
 pub use crate::additional_traits::DispatchVerifier;
 
 /// A type that cannot be instantiated.
