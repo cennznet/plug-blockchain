@@ -25,15 +25,12 @@ use sr_primitives::{
 	generic, doughnut, traits::{Verify, BlakeTwo256}, OpaqueExtrinsic, AnySignature
 };
 
-<<<<<<< HEAD
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 use codec::{Encode, Decode};
-=======
 // TODO: substrate 2.0 update - refactor plug extrinsic
 // /// The plug extrinsic type definition and impls
 // pub mod plug_extrinsic;
->>>>>>> master
 
 /// An index to a block.
 pub type BlockNumber = u32;
