@@ -121,6 +121,8 @@ impl system::Trait for Test {
 	type WeightMultiplierUpdate = ();
 	type Event = ();
 	type BlockHashCount = BlockHashCount;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type MaximumBlockLength = MaximumBlockLength;
@@ -200,6 +202,8 @@ parameter_types! {
 }
 impl Trait for Test {
 	type Currency = balances::Module<Self>;
+	type RewardCurrency = balances::Module<Self>;
+	type CurrencyToReward = Balance;
 	type Time = timestamp::Module<Self>;
 	type CurrencyToVote = CurrencyToVoteHandler;
 	type OnRewardMinted = ();

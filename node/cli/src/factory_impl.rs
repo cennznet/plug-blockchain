@@ -148,6 +148,7 @@ impl RuntimeAdapter for FactoryState<Number> {
 					(*amount).into()
 				)
 			)
+//			doughnut: None,
 		}, key, (version, genesis_hash.clone(), prior_block_hash.clone(), (), (), (), ()))
 	}
 
@@ -255,6 +256,8 @@ fn sign<RA: RuntimeAdapter>(
 		None => UncheckedExtrinsic {
 			signature: None,
 			function: xt.function,
+//			doughnut: None,
+//			_phantom: Default::default(),
 		},
 	};
 

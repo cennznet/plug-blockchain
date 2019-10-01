@@ -408,6 +408,8 @@ mod tests {
 		type Event = Event;
 		type WeightMultiplierUpdate = ();
 		type BlockHashCount = BlockHashCount;
+		type Doughnut = ();
+		type DispatchVerifier = ();
 		type MaximumBlockWeight = MaximumBlockWeight;
 		type MaximumBlockLength = MaximumBlockLength;
 		type AvailableBlockRatio = AvailableBlockRatio;

@@ -60,6 +60,8 @@ impl system::Trait for Test {
 	type WeightMultiplierUpdate = ();
 	type Event = TestEvent;
 	type BlockHashCount = BlockHashCount;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;

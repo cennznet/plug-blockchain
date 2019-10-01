@@ -71,6 +71,8 @@ impl system::Trait for Runtime {
 	type Header = Header;
 	type WeightMultiplierUpdate = ();
 	type Event = Event;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 	type BlockHashCount = BlockHashCount;
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;

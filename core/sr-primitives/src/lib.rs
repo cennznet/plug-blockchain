@@ -51,6 +51,10 @@ pub mod curve;
 pub mod generic;
 pub mod transaction_validity;
 pub mod sr_arithmetic;
+pub mod doughnut {
+	//! Runtime doughnut types
+	pub use doughnut::v0::parity::DoughnutV0;
+}
 
 /// Re-export these since they're only "kind of" generic.
 pub use generic::{DigestItem, Digest};

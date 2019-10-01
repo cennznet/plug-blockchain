@@ -113,6 +113,7 @@ use primitives::storage::well_known_keys;
 use support::{
 	decl_module, decl_event, decl_storage, decl_error, storage, Parameter,
 	traits::{Contains, Get},
+	additional_traits::DispatchVerifier as DispatchVerifierT,
 };
 use safe_mix::TripletMix;
 use codec::{Encode, Decode};
@@ -209,6 +210,11 @@ pub trait Trait: 'static + Eq + Clone {
 	/// Maximum number of block number to block hash mappings to keep (oldest pruned first).
 	type BlockHashCount: Get<Self::BlockNumber>;
 
+	/// The runtime doughnut type
+	type Doughnut: Decode;
+
+	/// A type which verifies a doughnut to dispatch a runtime call
+	type DispatchVerifier: DispatchVerifierT<Self::Doughnut>;
 	/// The maximum weight of a block.
 	type MaximumBlockWeight: Get<Weight>;
 
@@ -1188,6 +1194,8 @@ mod tests {
 		type WeightMultiplierUpdate = ();
 		type Event = u16;
 		type BlockHashCount = BlockHashCount;
+		type Doughnut = ();
+		type DispatchVerifier = ();
 		type MaximumBlockWeight = MaximumBlockWeight;
 		type AvailableBlockRatio = AvailableBlockRatio;
 		type MaximumBlockLength = MaximumBlockLength;

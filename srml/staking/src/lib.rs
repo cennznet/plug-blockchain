@@ -446,8 +446,10 @@ pub struct SlashJournalEntry<AccountId, Balance: HasCompact> {
 
 pub type BalanceOf<T> =
 	<<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
-type PositiveImbalanceOf<T> =
-	<<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::PositiveImbalance;
+pub type RewardBalanceOf<T> =
+	<<T as Trait>::RewardCurrency as Currency<<T as system::Trait>::AccountId>>::Balance;
+type RewardPositiveImbalanceOf<T> =
+	<<T as Trait>::RewardCurrency as Currency<<T as system::Trait>::AccountId>>::PositiveImbalance;
 type NegativeImbalanceOf<T> =
 	<<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::NegativeImbalance;
 type MomentOf<T>= <<T as Trait>::Time as Time>::Moment;
@@ -496,6 +498,11 @@ pub trait Trait: system::Trait {
 	/// The staking balance.
 	type Currency: LockableCurrency<Self::AccountId, Moment=Self::BlockNumber>;
 
+	/// The reward balance.
+	type RewardCurrency: Currency<Self::AccountId>;
+
+	/// Convert a staking balance to reward balance.
+	type CurrencyToReward: From<<Self::Currency as Currency<Self::AccountId>>::Balance> + Into<<Self::RewardCurrency as Currency<Self::AccountId>>::Balance>;
 	/// Time used for computing era duration.
 	type Time: Time;
 
@@ -507,7 +514,7 @@ pub trait Trait: system::Trait {
 	type CurrencyToVote: Convert<BalanceOf<Self>, u64> + Convert<u128, BalanceOf<Self>>;
 
 	/// Some tokens minted.
-	type OnRewardMinted: OnDilution<BalanceOf<Self>>;
+	type OnRewardMinted: OnDilution<RewardBalanceOf<Self>>;
 
 	/// The overarching event type.
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
@@ -516,7 +523,7 @@ pub trait Trait: system::Trait {
 	type Slash: OnUnbalanced<NegativeImbalanceOf<Self>>;
 
 	/// Handler for the unbalanced increment when rewarding a staker.
-	type Reward: OnUnbalanced<PositiveImbalanceOf<Self>>;
+	type Reward: OnUnbalanced<RewardPositiveImbalanceOf<Self>>;
 
 	/// Number of sessions per era.
 	type SessionsPerEra: Get<SessionIndex>;
@@ -654,9 +661,9 @@ decl_storage! {
 }
 
 decl_event!(
-	pub enum Event<T> where Balance = BalanceOf<T>, <T as system::Trait>::AccountId {
+	pub enum Event<T> where Balance = BalanceOf<T>, <T as system::Trait>::AccountId, RewardBalance = RewardBalanceOf<T> {
 		/// All validators have been rewarded by the given balance.
-		Reward(Balance),
+		Reward(RewardBalance),
 		/// One validator (and its nominators) has been slashed by the given amount.
 		Slash(AccountId, Balance),
 		/// An old slashing report from a prior era was discarded because it could
@@ -1093,34 +1100,31 @@ impl<T: Trait> Module<T> {
 
 	/// Actually make a payment to a staker. This uses the currency's reward function
 	/// to pay the right payee for the given staker account.
-	fn make_payout(stash: &T::AccountId, amount: BalanceOf<T>) -> Option<PositiveImbalanceOf<T>> {
+	fn make_payout(stash: &T::AccountId, amount: BalanceOf<T>) -> Option<RewardPositiveImbalanceOf<T>> {
+		let reward_amount = T::CurrencyToReward::from(amount).into();
 		let dest = Self::payee(stash);
 		match dest {
 			RewardDestination::Controller => Self::bonded(stash)
 				.and_then(|controller|
-					T::Currency::deposit_into_existing(&controller, amount).ok()
+					T::RewardCurrency::deposit_into_existing(&controller, reward_amount).ok()
 				),
 			RewardDestination::Stash =>
-				T::Currency::deposit_into_existing(stash, amount).ok(),
-			RewardDestination::Staked => Self::bonded(stash)
-				.and_then(|c| Self::ledger(&c).map(|l| (c, l)))
-				.and_then(|(controller, mut l)| {
-					l.active += amount;
-					l.total += amount;
-					let r = T::Currency::deposit_into_existing(stash, amount).ok();
-					Self::update_ledger(&controller, &l);
-					r
-				}),
+				T::RewardCurrency::deposit_into_existing(stash, reward_amount).ok(),
+			// With multi-token economy, rewards are not always tokens that could be used for staking.
+			// Thus it doesn't make sense to add `reward_amount` to staking amount.
+			// TODO: still need to do something if the reward currency is indeed stake currency
+			RewardDestination::Staked =>
+				T::RewardCurrency::deposit_into_existing(stash, reward_amount).ok(),
 		}
 	}
 
 	/// Reward a given validator by a specific amount. Add the reward to the validator's, and its
 	/// nominators' balance, pro-rata based on their exposure, after having removed the validator's
 	/// pre-payout cut.
-	fn reward_validator(stash: &T::AccountId, reward: BalanceOf<T>) -> PositiveImbalanceOf<T> {
+	fn reward_validator(stash: &T::AccountId, reward: BalanceOf<T>) -> RewardPositiveImbalanceOf<T> {
 		let off_the_table = reward.min(Self::validators(stash).validator_payment);
 		let reward = reward - off_the_table;
-		let mut imbalance = <PositiveImbalanceOf<T>>::zero();
+		let mut imbalance = <RewardPositiveImbalanceOf<T>>::zero();
 		let validator_cut = if reward.is_zero() {
 			Zero::zero()
 		} else {
@@ -1186,7 +1190,7 @@ impl<T: Trait> Module<T> {
 				era_duration.saturated_into::<u64>(),
 			);
 
-			let mut total_imbalance = <PositiveImbalanceOf<T>>::zero();
+			let mut total_imbalance = <RewardPositiveImbalanceOf<T>>::zero();
 
 			for (v, p) in validators.iter().zip(points.individual.into_iter()) {
 				if p != 0 {
@@ -1200,7 +1204,7 @@ impl<T: Trait> Module<T> {
 
 			Self::deposit_event(RawEvent::Reward(total_reward));
 			T::Reward::on_unbalanced(total_imbalance);
-			T::OnRewardMinted::on_dilution(total_reward, total_rewarded_stake);
+			T::OnRewardMinted::on_dilution(total_reward, T::CurrencyToReward::from(total_rewarded_stake).into());
 		}
 
 		// Increment current era.

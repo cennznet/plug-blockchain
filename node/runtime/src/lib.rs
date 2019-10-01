@@ -18,7 +18,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 // `construct_runtime!` does a lot of recursion and requires us to increase the limit to 256.
-#![recursion_limit="256"]
+#![recursion_limit = "256"]
 
 use rstd::prelude::*;
 use support::{
@@ -27,7 +27,7 @@ use support::{
 use primitives::u32_trait::{_1, _2, _3, _4};
 use node_primitives::{
 	AccountId, AccountIndex, Balance, BlockNumber, Hash, Index,
-	Moment, Signature, ContractExecResult,
+	Moment, Signature, ContractExecResult, Doughnut,
 };
 use babe_primitives::{AuthorityId as BabeId};
 use grandpa::fg_primitives;
@@ -63,6 +63,7 @@ pub use contracts::Gas;
 pub use support::StorageValue;
 pub use staking::StakerStatus;
 
+mod doughnut;
 /// Implementations of some helper traits passed into runtime modules as associated types.
 pub mod impls;
 use impls::{CurrencyToVoteHandler, WeightMultiplierUpdateHandler, Author, WeightToFee};
@@ -128,6 +129,8 @@ impl system::Trait for Runtime {
 	type WeightMultiplierUpdate = WeightMultiplierUpdateHandler;
 	type Event = Event;
 	type BlockHashCount = BlockHashCount;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
@@ -146,7 +149,7 @@ impl babe::Trait for Runtime {
 
 impl indices::Trait for Runtime {
 	type AccountIndex = AccountIndex;
-	type IsDeadAccount = Balances;
+	type IsDeadAccount = ();
 	type ResolveHint = indices::SimpleResolveHint<Self::AccountId, Self::AccountIndex>;
 	type Event = Event;
 }
@@ -253,6 +256,8 @@ parameter_types! {
 
 impl staking::Trait for Runtime {
 	type Currency = Balances;
+	type RewardCurrency = Balances;
+	type CurrencyToReward = Balance;
 	type Time = Timestamp;
 	type CurrencyToVote = CurrencyToVoteHandler;
 	type OnRewardMinted = Treasury;
@@ -532,6 +537,14 @@ pub type SignedExtra = (
 	balances::TakeFees<Runtime>,
 	contracts::CheckBlockGasLimit<Runtime>,
 );
+
+// TODO: substrate 2.0 update - use plug extrinsic
+// /// Unchecked extrinsic type as expected by this runtime.
+// pub type UncheckedExtrinsic =
+// 	plug_extrinsic::PlugExtrinsic<AccountId, Address, Index, Call, Signature, Doughnut>;
+// /// Extrinsic type that has already been checked.
+// pub type CheckedExtrinsic = plug_extrinsic::CheckedPlugExtrinsic<AccountId, Index, Call, Doughnut>;
+
 /// Unchecked extrinsic type as expected by this runtime.
 pub type UncheckedExtrinsic = generic::UncheckedExtrinsic<Address, Call, Signature, SignedExtra>;
 /// The payload being signed in transactions.

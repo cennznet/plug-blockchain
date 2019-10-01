@@ -93,4 +93,7 @@ pub mod well_known_keys {
 		}
 		has_right_prefix
 	}
+	
+	/// The key for storing/accessing an extrinsic's doughnut during execution
+	pub const DOUGHNUT_KEY: &'static [u8] = b":doughnut";
 }

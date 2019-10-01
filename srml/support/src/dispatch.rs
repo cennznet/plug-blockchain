@@ -1123,7 +1123,22 @@ macro_rules! decl_module {
 					$(#[doc = $doc_attr])*
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
-					) $( -> $result )* { $( $impl )* }
+					) $( -> $result )* {
+						// TODO: substrate 2.0 update - fix doughnut stuff
+						// use $crate::dispatch::DispatchVerifier;
+						// // Check if a doughnut exists in this execution context and whether it grants permission to
+						// // dispatch the call.
+						// // TODO: Use the constant key
+						// if let Some(doughnut) = $crate::storage::unhashed::get(b":doughnut") {
+						// 	let _ = <T as $system::Trait>::DispatchVerifier::verify(
+						// 		&doughnut,
+						// 		env!("CARGO_PKG_NAME"), // module
+						// 		stringify!($fn_name),   // method
+						// 	)?;
+						// }
+
+						$( $impl )*
+					}
 				}
 			)*
 		}
@@ -1574,7 +1589,6 @@ macro_rules! __call_to_functions {
 	};
 }
 
-
 /// Convert a list of functions into a list of `FunctionMetadata` items.
 #[macro_export]
 #[doc(hidden)]
@@ -1707,6 +1721,7 @@ mod tests {
 	use super::*;
 	use crate::sr_primitives::traits::{OnInitialize, OnFinalize};
 	use sr_primitives::weights::{DispatchInfo, DispatchClass};
+	use crate::additional_traits::DispatchVerifier;
 
 	pub trait Trait: system::Trait + Sized where Self::AccountId: From<u32> {
 		type Origin;
@@ -1715,10 +1730,11 @@ mod tests {
 	}
 
 	pub mod system {
-		use super::Result;
+		use super::{DispatchVerifier as DispatchVerifierT, Result};
 
 		pub trait Trait {
 			type AccountId;
+			type DispatchVerifier: DispatchVerifierT<()>;
 		}
 
 		pub fn ensure_root<R>(_: R) -> Result {
@@ -1747,72 +1763,72 @@ mod tests {
 	}
 
 	const EXPECTED_METADATA: &'static [FunctionMetadata] = &[
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_0"),
-					arguments: DecodeDifferent::Encode(&[]),
-					documentation: DecodeDifferent::Encode(&[
-						" Hi, this is a comment."
-					])
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_0"),
+			arguments: DecodeDifferent::Encode(&[]),
+			documentation: DecodeDifferent::Encode(&[
+				" Hi, this is a comment."
+			])
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_1"),
+			arguments: DecodeDifferent::Encode(&[
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data"),
+					ty: DecodeDifferent::Encode("Compact<u32>")
+				}
+			]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_2"),
+			arguments: DecodeDifferent::Encode(&[
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data"),
+					ty: DecodeDifferent::Encode("i32"),
 				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_1"),
-					arguments: DecodeDifferent::Encode(&[
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data"),
-							ty: DecodeDifferent::Encode("Compact<u32>")
-						}
-					]),
-					documentation: DecodeDifferent::Encode(&[]),
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data2"),
+					ty: DecodeDifferent::Encode("String"),
+				}
+			]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_3"),
+			arguments: DecodeDifferent::Encode(&[]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_4"),
+			arguments: DecodeDifferent::Encode(&[
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data"),
+					ty: DecodeDifferent::Encode("i32"),
+				}
+			]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("aux_5"),
+			arguments: DecodeDifferent::Encode(&[
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data"),
+					ty: DecodeDifferent::Encode("i32"),
 				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_2"),
-					arguments: DecodeDifferent::Encode(&[
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data"),
-							ty: DecodeDifferent::Encode("i32"),
-						},
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data2"),
-							ty: DecodeDifferent::Encode("String"),
-						}
-					]),
-					documentation: DecodeDifferent::Encode(&[]),
-				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_3"),
-					arguments: DecodeDifferent::Encode(&[]),
-					documentation: DecodeDifferent::Encode(&[]),
-				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_4"),
-					arguments: DecodeDifferent::Encode(&[
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data"),
-							ty: DecodeDifferent::Encode("i32"),
-						}
-					]),
-					documentation: DecodeDifferent::Encode(&[]),
-				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("aux_5"),
-					arguments: DecodeDifferent::Encode(&[
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data"),
-							ty: DecodeDifferent::Encode("i32"),
-						},
-						FunctionArgumentMetadata {
-							name: DecodeDifferent::Encode("_data2"),
-							ty: DecodeDifferent::Encode("Compact<u32>")
-						}
-					]),
-					documentation: DecodeDifferent::Encode(&[]),
-				},
-				FunctionMetadata {
-					name: DecodeDifferent::Encode("operational"),
-					arguments: DecodeDifferent::Encode(&[]),
-					documentation: DecodeDifferent::Encode(&[]),
-				},
-			];
+				FunctionArgumentMetadata {
+					name: DecodeDifferent::Encode("_data2"),
+					ty: DecodeDifferent::Encode("Compact<u32>")
+				}
+			]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+		FunctionMetadata {
+			name: DecodeDifferent::Encode("operational"),
+			arguments: DecodeDifferent::Encode(&[]),
+			documentation: DecodeDifferent::Encode(&[]),
+		},
+	];
 
 	pub struct TraitImpl {}
 
@@ -1832,6 +1848,7 @@ mod tests {
 
 	impl system::Trait for TraitImpl {
 		type AccountId = u32;
+		type DispatchVerifier = ();
 	}
 
 	#[test]

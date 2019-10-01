@@ -352,3 +352,157 @@ impl<Call: Encode, Extra: Encode> GetDispatchInfo for TestXt<Call, Extra> {
 		}
 	}
 }
+
+pub mod doughnut {
+	//!
+	//! Doughnut aware types for extrinsic tests
+	//!
+	use super::*;
+	use crate::traits::{DoughnutApi, Doughnuted};
+
+	/// A test account ID. Stores a `u64` as a byte array
+	#[derive(PartialEq, Eq, Clone, Debug, Decode, Encode, PartialOrd, Serialize, Deserialize, Default, Ord)]
+	pub struct TestAccountId(pub [u8; 8]);
+
+	impl TestAccountId {
+		/// Create a new TestAccountId
+		pub	fn new(id: u64) -> Self {
+			TestAccountId(id.to_le_bytes())
+		}
+	}
+
+	impl AsRef<[u8]> for TestAccountId {
+		fn as_ref(&self) -> &[u8] {
+			&self.0[..]
+		}
+	}
+
+	impl fmt::Display for TestAccountId {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			write!(f, "TestAccountId({:?})", self.0)
+		}
+	}
+
+	/// Test transaction
+	#[derive(PartialEq, Eq, Clone, Encode, Decode)]
+	pub struct TestXt<Call, Doughnut>{
+		/// The extrinsic signer, if any
+		pub sender: Option<TestAccountId>,
+		/// The nonce/index
+		pub index: u64,
+		/// Target runtime call
+		pub function: Call,
+		/// An attached doughnut, if any
+		pub doughnut: Option<Doughnut>,
+	}
+
+	impl<Call, Doughnut> TestXt<Call, Doughnut> {
+		/// Create a new TestXt with Doughnut attached
+		pub fn new(sender: Option<u64>, index: u64, function: Call, doughnut: Option<Doughnut>) -> Self {
+			TestXt {
+				sender: sender.map(|id| TestAccountId::new(id)),
+				index,
+				function,
+				doughnut: doughnut,
+			}
+		}
+	}
+
+	impl<Call, Doughnut> Serialize for TestXt<Call, Doughnut>
+		where
+			TestXt<Call, Doughnut>: Encode,
+	{
+		fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error> where S: Serializer {
+			self.using_encoded(|bytes| seq.serialize_bytes(bytes))
+		}
+	}
+
+	impl<Call, Doughnut: Debug> Debug for TestXt<Call, Doughnut> {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			// TODO: Add function
+			write!(f, "TestXt({:?}, {:?}, {:?})", self.sender, self.index, self.doughnut)
+		}
+	}
+
+	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>{
+		type Checked = Self;
+		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
+	}
+
+	impl<Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<Call, Extra> {
+		type Call = Call;
+
+		fn is_signed(&self) -> Option<bool> {
+			Some(self.sender.is_some())
+		}
+
+		fn new_unsigned(_c: Call) -> Option<Self> {
+			None
+		}
+	}
+
+	impl<Origin, Call, Extra> Applyable for TestXt<Call, Extra> where
+		Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug + Dispatchable<Origin=Origin>,
+		Extra: SignedExtension<AccountId=TestAccountId, Call=Call>,
+		Origin: From<Option<TestAccountId>>
+	{
+		type AccountId = TestAccountId;
+		type Call = Call;
+
+		fn sender(&self) -> Option<&TestAccountId> { self.sender.as_ref() }
+
+		/// Checks to see if this is a valid *transaction*. It returns information on it if so.
+		fn validate<U: ValidateUnsigned<Call=Self::Call>>(&self,
+			_info: DispatchInfo,
+			_len: usize,
+		) -> TransactionValidity {
+			TransactionValidity::Valid(Default::default())
+		}
+
+		/// Executes all necessary logic needed prior to dispatch and deconstructs into function call,
+		/// index and sender.
+		fn dispatch(self,
+			info: DispatchInfo,
+			len: usize,
+		) -> Result<DispatchResult, DispatchError> {
+			let maybe_who = if let (Some(who), Some(extra)) = (self.sender, self.doughnut) {
+				Extra::pre_dispatch(extra, &who, &self.function, info, len)?;
+				Some(who)
+			} else {
+				Extra::pre_dispatch_unsigned(&self.function, info, len)?;
+				None
+			};
+			Ok(self.function.dispatch(maybe_who.into()))
+		}
+	}
+
+	impl<Call, Doughnut> Doughnuted for TestXt<Call, Doughnut> where
+		Doughnut: Clone + Decode + Encode + DoughnutApi,
+	{
+		type Doughnut = Doughnut;
+		fn doughnut(&self) -> Option<&Self::Doughnut> {
+			self.doughnut.as_ref()
+		}
+	}
+
+	/// A test doughnut
+	#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
+	pub struct DummyDoughnut {
+		/// The issuer ID
+		pub issuer: TestAccountId,
+		/// The holder ID
+		pub holder: TestAccountId,
+	}
+
+	impl DoughnutApi for DummyDoughnut {
+		type AccountId = TestAccountId;
+		type Signature = Vec<u8>;
+		type Timestamp = ();
+		fn holder(&self) -> Self::AccountId { self.holder.clone() }
+		fn issuer(&self) -> Self::AccountId { self.issuer.clone() }
+		fn expiry(&self) -> Self::Timestamp { () }
+		fn payload(&self) -> Vec<u8> { Default::default() }
+		fn signature(&self) -> Self::Signature { Default::default() }
+		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
+	}
+}

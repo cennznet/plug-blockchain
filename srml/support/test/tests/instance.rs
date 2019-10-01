@@ -242,6 +242,7 @@ impl system::Trait for Runtime {
 	type BlockNumber = BlockNumber;
 	type AccountId = AccountId;
 	type Event = Event;
+	type DispatchVerifier = ();
 }
 
 support::construct_runtime!(

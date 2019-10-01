@@ -22,12 +22,18 @@
 
 use rstd::prelude::*;
 use sr_primitives::{
-	generic, traits::{Verify, BlakeTwo256}, OpaqueExtrinsic, AnySignature
+	generic, doughnut, traits::{Verify, BlakeTwo256}, OpaqueExtrinsic, AnySignature
 };
 
+<<<<<<< HEAD
 #[cfg(feature = "std")]
 use serde::{Serialize, Deserialize};
 use codec::{Encode, Decode};
+=======
+// TODO: substrate 2.0 update - refactor plug extrinsic
+// /// The plug extrinsic type definition and impls
+// pub mod plug_extrinsic;
+>>>>>>> master
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -90,6 +96,9 @@ pub enum ContractExecResult {
 	/// The contract execution either trapped or returned an error.
 	Error,
 }
+
+/// The runtime supported Doughnut type
+pub type Doughnut = doughnut::DoughnutV0;
 
 client::decl_runtime_apis! {
 	/// The API to query account account nonce (aka index).

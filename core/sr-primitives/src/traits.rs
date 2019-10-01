@@ -1,4 +1,3 @@
-// Copyright 2017-2019 Parity Technologies (UK) Ltd.
 // This file is part of Substrate.
 
 // Substrate is free software: you can redistribute it and/or modify
@@ -41,6 +40,7 @@ use rstd::ops::{
 };
 use app_crypto::AppKey;
 use impl_trait_for_tuples::impl_for_tuples;
+pub use doughnut::traits::DoughnutApi;
 
 /// A lazy value.
 pub trait Lazy<T: ?Sized> {
@@ -983,6 +983,17 @@ pub trait Applyable: Sized + Send + Sync {
 		info: DispatchInfo,
 		len: usize,
 	) -> crate::ApplyResult;
+}
+
+/// An `Extrinsic` which may contain a `Doughnut`
+pub trait Doughnuted {
+	/// The concrete Doughnut impl type
+	type Doughnut: Encode + Clone + DoughnutApi;
+
+	/// Returns a reference to the Doughnut, if any
+	fn doughnut(&self) -> Option<&Self::Doughnut> {
+		None
+	}
 }
 
 /// Auxiliary wrapper that holds an api instance and binds it to the given lifetime.

@@ -751,6 +751,7 @@ where
 			"https://127.0.0.1:*".into(),
 			"https://polkadot.js.org".into(),
 			"https://substrate-ui.parity.io".into(),
+			"https://cennznet.js.org".into(),
 		])
 	}).into();
 

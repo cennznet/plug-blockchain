@@ -49,6 +49,8 @@ mod hash;
 #[macro_use]
 pub mod event;
 #[macro_use]
+pub mod fee;
+#[macro_use]
 mod origin;
 #[macro_use]
 pub mod metadata;
@@ -61,6 +63,7 @@ pub mod unsigned;
 #[macro_use]
 pub mod error;
 pub mod traits;
+pub mod additional_traits;
 
 pub use self::hash::{Twox256, Twox128, Blake2_256, Blake2_128, Twox64Concat, Hashable};
 pub use self::storage::{StorageValue, StorageMap, StorageLinkedMap, StorageDoubleMap};

@@ -61,6 +61,8 @@ impl system::Trait for Test {
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type BlockHashCount = BlockHashCount;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 	type Version = ();
 }
 

@@ -119,6 +119,8 @@ mod tests {
 		type Event = Event;
 		type Error = Error;
 		type BlockHashCount = BlockHashCount;
+		type Doughnut = ();
+		type DispatchVerifier = ();
 		type MaximumBlockWeight = MaximumBlockWeight;
 		type MaximumBlockLength = MaximumBlockLength;
 		type AvailableBlockRatio = AvailableBlockRatio;
