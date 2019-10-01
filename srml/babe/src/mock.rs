@@ -68,6 +68,8 @@ impl system::Trait for Test {
 	type MaximumBlockWeight = MaximumBlockWeight;
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type MaximumBlockLength = MaximumBlockLength;
+	type Doughnut = ();
+	type DispatchVerifier = ();
 }
 
 impl_opaque_keys! {
