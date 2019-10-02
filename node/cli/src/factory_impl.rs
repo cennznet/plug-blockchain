@@ -51,7 +51,7 @@ type Number = <<node_primitives::Block as BlockT>::Header as HeaderT>::Number;
 impl<Number> FactoryState<Number> {
 	fn build_extra(index: node_primitives::Index, phase: u64) -> node_runtime::SignedExtra {
 		(
-      None,
+			None,
 			system::CheckVersion::new(),
 			system::CheckGenesis::new(),
 			system::CheckEra::from(Era::mortal(256, phase)),
@@ -148,7 +148,6 @@ impl RuntimeAdapter for FactoryState<Number> {
 					(*amount).into()
 				)
 			)
-//			doughnut: None,
 		}, key, ((), version, genesis_hash.clone(), prior_block_hash.clone(), (), (), ()))
 	}
 

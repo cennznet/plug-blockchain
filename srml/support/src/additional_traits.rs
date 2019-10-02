@@ -1,6 +1,7 @@
 //! Additional traits to srml original traits. These traits are generally used
 //! to decouple `srml` modules from `prml` modules.
 
+use sr_primitives::traits::DoughnutApi;
 use sr_std::marker::PhantomData;
 
 /// Perform fee payment for an extrinsic
@@ -67,4 +68,18 @@ impl<Doughnut> DispatchVerifier<Doughnut> for () {
 	fn verify(_: &Doughnut, _: &str, _: &str) -> Result<(), &'static str> {
 		Err("Doughnut dispatch verification is not implemented for this domain")
 	}
+}
+
+/// Something which may have doughnut. Returns a ref to the doughnut, if any.
+/// It's main purpose is to allow checking if an `OuterOrigin` contains a doughnut (i.e. it is delegated).
+pub trait MaybeDoughnutRef {
+	/// The doughnut type
+	type Doughnut: DoughnutApi;
+	/// Return a `&Doughnut`, if any
+	fn doughnut(&self) -> Option<&Self::Doughnut>;
+}
+
+impl MaybeDoughnutRef for () {
+	type Doughnut = ();
+	fn doughnut(&self) -> Option<&Self::Doughnut> { None }
 }

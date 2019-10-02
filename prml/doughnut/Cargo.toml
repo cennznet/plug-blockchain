@@ -16,13 +16,14 @@ support = { package = "srml-support", path = "../../srml/support", default-featu
 
 [features]
 default = ["std"]
+mock = []
 std = [
 	"codec/std",
 	"primitives/std",
 	"rstd/std",
 	"serde",
 	"sr-primitives/std",
-  "support/std",
+	"support/std",
 	"system/std",
 	"timestamp/std",
 ]

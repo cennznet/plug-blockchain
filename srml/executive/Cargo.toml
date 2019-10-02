@@ -12,12 +12,14 @@ runtime_io = { package = "sr-io", path = "../../core/sr-io", default-features = 
 sr-primitives = { path = "../../core/sr-primitives", default-features = false }
 srml-support = { path = "../support", default-features = false }
 system = { package = "srml-system", path = "../system", default-features = false }
-substrate-primitives = { path = "../../core/primitives", default-features = false }
+primitives = { package = "substrate-primitives", path = "../../core/primitives", default-features = false }
 
 [dev-dependencies]
-hex-literal = "0.2.0"
-srml-indices = { path = "../indices" }
 balances = { package = "srml-balances", path = "../balances" }
+hex-literal = "0.2.0"
+prml-doughnut = { path = "../../prml/doughnut", default-features = false, features = ["mock"] }
+timestamp = { package = "srml-timestamp", path = "../timestamp", default-features = false }
+srml-indices = { path = "../indices" }
 
 [features]
 default = ["std"]
@@ -26,8 +28,8 @@ std = [
 	"srml-support/std",
 	"serde",
 	"codec/std",
+	"primitives/std",
 	"sr-primitives/std",
 	"runtime_io/std",
 	"system/std",
-	"substrate-primitives/std",
 ]

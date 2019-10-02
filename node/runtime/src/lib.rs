@@ -131,7 +131,12 @@ impl system::Trait for Runtime {
 	type Version = Version;
 }
 
-impl prml_doughnut::DoughnutRuntime for Runtime {}
+impl prml_doughnut::DoughnutRuntime for Runtime {
+	type AccountId = <Self as system::Trait>::AccountId;
+	type Call = Call;
+	type Doughnut = <Self as system::Trait>::Doughnut;
+	type TimestampProvider = timestamp::Module<Runtime>;
+}
 
 parameter_types! {
 	pub const EpochDuration: u64 = EPOCH_DURATION_IN_SLOTS;
@@ -469,7 +474,8 @@ pub type Block = generic::Block<Header, UncheckedExtrinsic>;
 pub type SignedBlock = generic::SignedBlock<Block>;
 /// BlockId type as expected by this runtime.
 pub type BlockId = generic::BlockId<Block>;
-/// The SignedExtension to the basic transaction logic.
+/// The `SignedExtension` payload for transactions in the plug runtime.
+/// It can contain a doughnut delegation proof as it's first value.
 pub type SignedExtra = (
 	Option<<Runtime as system::Trait>::Doughnut>,
 	system::CheckVersion<Runtime>,

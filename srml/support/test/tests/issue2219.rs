@@ -161,6 +161,7 @@ impl system::Trait for Runtime {
 	type AccountId = AccountId;
 	type Event = Event;
 	type DispatchVerifier = ();
+	type Doughnut = ();
 }
 
 impl module::Trait for Runtime {}

@@ -451,33 +451,32 @@ tuple_impl!(A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W,
 // Blanket impl for `Option<T: SignedExtension>`
 impl<T, AccountId> SignedExtension for Option<T>
 where
-  T: SignedExtension<AccountId=AccountId>,
+	T: SignedExtension<AccountId=AccountId>,
 {
-  type AccountId = AccountId;
-  type AdditionalSigned = ();
-  type Call = T::Call;
-  type Pre = T::Pre;
-  fn additional_signed(&self) -> rstd::result::Result<Self::AdditionalSigned, &'static str> { 
-    Ok(())
-  }
-  fn validate(&self, who: &Self::AccountId, call: &Self::Call, info: DispatchInfo, len: usize) -> Result<ValidTransaction, DispatchError> {
-    if let Some(inner) = self {
-      return inner.validate(who, call, info, len)
-    }
-    Ok(ValidTransaction::default())
-  }
+	type AccountId = AccountId;
+	type AdditionalSigned = ();
+	type Call = T::Call;
+	type Pre = T::Pre;
+	fn additional_signed(&self) -> rstd::result::Result<Self::AdditionalSigned, &'static str> { 
+		Ok(())
+	}
+	fn validate(&self, who: &Self::AccountId, call: &Self::Call, info: DispatchInfo, len: usize) -> Result<ValidTransaction, DispatchError> {
+		if let Some(inner) = self {
+			return inner.validate(who, call, info, len)
+		}
+		Ok(ValidTransaction::default())
+	}
 }
 
-/// A `SignedExtra` payload which my contain a doughnut delegation proof among it's values.
-/// This trait allows the doughnut value to be freely extracted from an extrinsic's `SignedExtension` payload.
+/// This trait allows a doughnut value to be deconstructed from an extrinsic's `SignedExtension` payload.
 /// This is not possible with the `SignedExtension` trait alone, since the fields are indistinguishable
 /// from each other and are only decoded in pre-set hooks (`pre_dispatch`, `validate`, etc.), where as the doughnut is
-/// required in other places outside these hooks, such as `Applyable::dispatch`.  
+/// required outside these hooks, such as `Applyable::dispatch`.
 pub trait MaybeDoughnut {
-  /// The extension doughnut type
-  type Doughnut: Send + Sync + DoughnutApi;
-  /// Return the doughnut from the `SignedExtension` payload, if any
-  fn doughnut(&self) -> Option<&Self::Doughnut>;
+	/// The extension doughnut type
+	type Doughnut: Send + Sync + DoughnutApi;
+	/// Return the doughnut from the `SignedExtension` payload, if any
+	fn doughnut(self) -> Option<Self::Doughnut>;
 }
 
 /// Abstraction around hashing
@@ -850,6 +849,12 @@ pub enum DispatchError {
 
 	/// General error to do with the transaction's proofs (e.g. signature).
 	BadProof,
+
+	/// Attached doughnut has invalid signature
+	BadSignatureDoughnut,
+
+	/// Use of a doughnut was invalid w.r.t signer/holder, expiry, not_before, and other constraints.
+	InvalidDoughnut,
 }
 
 impl From<DispatchError> for i8 {
@@ -862,6 +867,9 @@ impl From<DispatchError> for i8 {
 			DispatchError::Stale => -68,
 			DispatchError::Future => -69,
 			DispatchError::BadProof => -70,
+			// Doughnut error codes
+			DispatchError::BadSignatureDoughnut => -80,
+			DispatchError::InvalidDoughnut => -81,
 		}
 	}
 }
@@ -933,7 +941,7 @@ pub trait SignedExtension:
 	/// If you ever override this function, you need to make sure to always
 	/// perform the same validation as in `validate`.
 	fn pre_dispatch(
-		self,
+		&self,
 		who: &Self::AccountId,
 		call: &Self::Call,
 		info: DispatchInfo,
@@ -1011,7 +1019,7 @@ macro_rules! tuple_impl_indexed {
 				Ok(aggregator.into_iter().fold(ValidTransaction::default(), |acc, a| acc.combine_with(a)))
 			}
 			fn pre_dispatch(
-				self,
+				&self,
 				who: &Self::AccountId,
 				call: &Self::Call,
 				info: DispatchInfo,
@@ -1043,16 +1051,16 @@ macro_rules! tuple_impl_indexed {
 			}
 		}
 
-    impl<
-      AccountId,
-      Doughnut: SignedExtension<AccountId=AccountId> + DoughnutApi,
-      $($direct: SignedExtension<AccountId=AccountId>),+
-    > MaybeDoughnut for (Option<Doughnut>, $($direct),+,) {
-      type Doughnut = Doughnut;
-      fn doughnut(&self) -> Option<&Self::Doughnut> {
-        self.0.as_ref()
-      }
-    }
+		impl<
+			AccountId,
+			Doughnut: SignedExtension<AccountId=AccountId> + DoughnutApi,
+			$($direct: SignedExtension<AccountId=AccountId>),+
+		> MaybeDoughnut for (Option<Doughnut>, $($direct),+,) {
+			type Doughnut = Doughnut;
+			fn doughnut(self) -> Option<Self::Doughnut> {
+				self.0
+			}
+		}
 	};
 	([$($direct:ident)+] [] ; [$($index:tt,)+] []) => {
 		tuple_impl_indexed!([$($direct)+] ; [$($index,)+]);
@@ -1109,17 +1117,6 @@ pub trait Applyable: Sized + Send + Sync {
 		info: DispatchInfo,
 		len: usize,
 	) -> Result<DispatchResult, DispatchError>;
-}
-
-/// An `Extrinsic` which may contain a `Doughnut`
-pub trait Doughnuted {
-	/// The concrete Doughnut impl type
-	type Doughnut: Encode + Clone + DoughnutApi;
-
-	/// Returns a reference to the Doughnut, if any
-	fn doughnut(&self) -> Option<&Self::Doughnut> {
-		None
-	}
 }
 
 /// Auxiliary wrapper that holds an api instance and binds it to the given lifetime.

@@ -122,14 +122,14 @@ impl InitializeMembers<u64> for TestChangeMembers {
 
 impl Trait for Test {
 	type Event = ();
-	type KickOrigin = EnsureSignedBy<KickOrigin, u64>;
+	type KickOrigin = EnsureSignedBy<KickOrigin, u64, ()>;
 	type MembershipInitialized = TestChangeMembers;
 	type MembershipChanged = TestChangeMembers;
 	type Currency = balances::Module<Self>;
 	type CandidateDeposit = CandidateDeposit;
 	type Period = Period;
 	type Score = u64;
-	type ScoreOrigin = EnsureSignedBy<ScoreOrigin, u64>;
+	type ScoreOrigin = EnsureSignedBy<ScoreOrigin, u64, ()>;
 }
 
 // This function basically just builds a genesis storage key/value store according to

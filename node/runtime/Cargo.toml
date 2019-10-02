@@ -78,7 +78,6 @@ std = [
 	"offchain-primitives/std",
 	"offences/std",
 	"primitives/std",
-  "prml-doughnut/std",
 	"rstd/std",
 	"rustc-hex",
 	"safe-mix/std",
@@ -95,4 +94,5 @@ std = [
 	"timestamp/std",
 	"treasury/std",
 	"version/std",
+	"prml-doughnut/std",
 ]

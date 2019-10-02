@@ -230,6 +230,7 @@ mod tests {
 	};
 	use codec::{Encode, Decode};
 	use crate::traits::Get;
+	use crate::additional_traits::MaybeDoughnutRef;
 
 	mod system {
 		use crate::dispatch::DispatchVerifier as DispatchVerifierT;
@@ -237,11 +238,12 @@ mod tests {
 
 		pub trait Trait {
 			const ASSOCIATED_CONST: u64 = 500;
-			type Origin: Into<Result<RawOrigin<Self::AccountId>, Self::Origin>>
-				+ From<RawOrigin<Self::AccountId>>;
+			type Origin: Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>>
+				+ From<RawOrigin<Self::AccountId, Self::Doughnut>> + MaybeDoughnutRef<Doughnut=()>;
 			type AccountId: From<u32> + Encode;
 			type BlockNumber: From<u32> + Encode;
 			type SomeValue: Get<u32>;
+			type Doughnut;
 			type DispatchVerifier: DispatchVerifierT<()>;
 		}
 
@@ -261,22 +263,24 @@ mod tests {
 		);
 
 		#[derive(Clone, PartialEq, Eq, Debug)]
-		pub enum RawOrigin<AccountId> {
+		pub enum RawOrigin<AccountId, Doughnut> {
 			Root,
 			Signed(AccountId),
+			Delegated(AccountId, Doughnut),
 			None,
 		}
 
-		impl<AccountId> From<Option<AccountId>> for RawOrigin<AccountId> {
-			fn from(s: Option<AccountId>) -> RawOrigin<AccountId> {
+		impl<AccountId, Doughnut> From<(Option<AccountId>, Option<Doughnut>)> for RawOrigin<AccountId, Doughnut> {
+			fn from(s: (Option<AccountId>, Option<Doughnut>)) -> RawOrigin<AccountId, Doughnut> {
 				match s {
-					Some(who) => RawOrigin::Signed(who),
-					None => RawOrigin::None,
+					(Some(who), None) => RawOrigin::Signed(who),
+					(Some(who), Some(doughnut)) => RawOrigin::Delegated(who, doughnut),
+					_ => RawOrigin::None,
 				}
 			}
 		}
 
-		pub type Origin<T> = RawOrigin<<T as Trait>::AccountId>;
+		pub type Origin<T> = RawOrigin<<T as Trait>::AccountId, <T as Trait>::Doughnut>;
 	}
 
 	mod event_module {
@@ -372,6 +376,7 @@ mod tests {
 		type BlockNumber = u32;
 		type SomeValue = SystemValue;
 		type DispatchVerifier = ();
+		type Doughnut = ();
 	}
 
 	impl_runtime_metadata!(

@@ -21,12 +21,12 @@ use std::{fmt::Debug, ops::Deref, fmt};
 use crate::codec::{Codec, Encode, Decode};
 use crate::traits::{
 	self, Checkable, Applyable, BlakeTwo256, OpaqueKeys, DispatchError, DispatchResult,
-	ValidateUnsigned, SignedExtension, Dispatchable,
+	ValidateUnsigned, SignedExtension, Dispatchable, DoughnutApi, MaybeDisplay, MaybeDoughnut
 };
 use crate::{generic, KeyTypeId};
 use crate::weights::{GetDispatchInfo, DispatchInfo};
-pub use primitives::H256;
-use primitives::{crypto::{CryptoType, Dummy, key_types, Public}, U256};
+pub use primitives::{H256, H512};
+use primitives::{crypto::{CryptoType, Dummy, key_types, Public, UncheckedFrom}, U256};
 use crate::transaction_validity::TransactionValidity;
 
 /// Authority Id
@@ -254,25 +254,25 @@ impl<'a, Xt> Deserialize<'a> for Block<Xt> where Block<Xt>: Decode {
 ///
 /// If sender is some then the transaction is signed otherwise it is unsigned.
 #[derive(PartialEq, Eq, Clone, Encode, Decode)]
-pub struct TestXt<Call, Extra>(pub Option<(u64, Extra)>, pub Call);
+pub struct TestXt<AccountId, Call, Extra>(pub Option<(AccountId, Extra)>, pub Call);
 
-impl<Call, Extra> Serialize for TestXt<Call, Extra> where TestXt<Call, Extra>: Encode {
+impl<AccountId, Call, Extra> Serialize for TestXt<AccountId, Call, Extra> where TestXt<AccountId, Call, Extra>: Encode {
 	fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error> where S: Serializer {
 		self.using_encoded(|bytes| seq.serialize_bytes(bytes))
 	}
 }
 
-impl<Call, Extra> Debug for TestXt<Call, Extra> {
+impl<AccountId: Debug, Call, Extra> Debug for TestXt<AccountId, Call, Extra> {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "TestXt({:?}, ...)", self.0.as_ref().map(|x| &x.0))
 	}
 }
 
-impl<Call: Codec + Sync + Send, Context, Extra> Checkable<Context> for TestXt<Call, Extra> {
+impl<AccountId: Sync + Send, Call: Codec + Sync + Send, Context, Extra> Checkable<Context> for TestXt<AccountId, Call, Extra> {
 	type Checked = Self;
 	fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
 }
-impl<Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<Call, Extra> {
+impl<AccountId: Send + Sync, Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<AccountId, Call, Extra> {
 	type Call = Call;
 
 	fn is_signed(&self) -> Option<bool> {
@@ -284,12 +284,14 @@ impl<Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<Call, Extra>
 	}
 }
 
-impl<Origin, Call, Extra> Applyable for TestXt<Call, Extra> where
+impl<AccountId, Call, Extra, Origin, Doughnut> Applyable for TestXt<AccountId, Call, Extra> where
+	AccountId: 'static + Send + Sync + Clone + Eq + Codec + Debug + MaybeDisplay + AsRef<[u8]>,
 	Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug + Dispatchable<Origin=Origin>,
-	Extra: SignedExtension<AccountId=u64, Call=Call>,
-	Origin: From<Option<u64>>
+	Extra: SignedExtension<AccountId=AccountId, Call=Call> + MaybeDoughnut<Doughnut=Doughnut>,
+	Origin: From<(Option<AccountId>,Option<Doughnut>)>,
+	Doughnut: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug + DoughnutApi<PublicKey=AccountId>,
 {
-	type AccountId = u64;
+	type AccountId = AccountId;
 	type Call = Call;
 
 	fn sender(&self) -> Option<&Self::AccountId> { self.0.as_ref().map(|x| &x.0) }
@@ -308,18 +310,28 @@ impl<Origin, Call, Extra> Applyable for TestXt<Call, Extra> where
 		info: DispatchInfo,
 		len: usize,
 	) -> Result<DispatchResult, DispatchError> {
-		let maybe_who = if let Some((who, extra)) = self.0 {
-			Extra::pre_dispatch(extra, &who, &self.1, info, len)?;
-			Some(who)
-		} else {
-			Extra::pre_dispatch_unsigned(&self.1, info, len)?;
-			None
-		};
-		Ok(self.1.dispatch(maybe_who.into()))
+			let (pre, res) = if let Some((id, extra)) = self.0 {
+				let pre = Extra::pre_dispatch(&extra, &id, &self.1, info, len)?;
+
+				if let Some(doughnut) = extra.doughnut() {
+					// A delegated transaction
+					(pre, self.1.dispatch(Origin::from((Some(doughnut.issuer()), Some(doughnut)))))
+				} else {
+					// An ordinary signed transaction
+					(pre, self.1.dispatch(Origin::from((Some(id), None))))
+				}
+			} else {
+				// An inherent unsiged transaction
+				let pre = Extra::pre_dispatch_unsigned(&self.1, info, len)?;
+				(pre, self.1.dispatch(Origin::from((None, None))))
+			};
+
+			Extra::post_dispatch(pre, info, len);
+			Ok(res)
 	}
 }
 
-impl<Call: Encode, Extra: Encode> GetDispatchInfo for TestXt<Call, Extra> {
+impl<AccountId: Encode, Call: Encode, Extra: Encode> GetDispatchInfo for TestXt<AccountId, Call, Extra> {
 	fn get_dispatch_info(&self) -> DispatchInfo {
 		// for testing: weight == size.
 		DispatchInfo {
@@ -334,7 +346,7 @@ pub mod doughnut {
 	//! Doughnut aware types for extrinsic tests
 	//!
 	use super::*;
-	use crate::traits::{DoughnutApi, Doughnuted};
+	use crate::traits::DoughnutApi;
 
 	/// A test account ID. Stores a `u64` as a byte array
 	#[derive(PartialEq, Eq, Clone, Debug, Decode, Encode, PartialOrd, Serialize, Deserialize, Default, Ord)]
@@ -347,9 +359,33 @@ pub mod doughnut {
 		}
 	}
 
+	impl From<u64> for TestAccountId {
+		fn from(val: u64) -> Self {
+			TestAccountId::new(val)
+		}
+	}
+
+	impl UncheckedFrom<[u8; 32]> for TestAccountId {
+		fn unchecked_from(val: [u8; 32]) -> Self {
+			let mut buf: [u8; 8] = Default::default();
+			buf.copy_from_slice(&val[0..8]);
+			TestAccountId(buf)
+		}
+	}
+
 	impl AsRef<[u8]> for TestAccountId {
 		fn as_ref(&self) -> &[u8] {
 			&self.0[..]
+		}
+	}
+
+	impl Into<[u8; 32]> for TestAccountId {
+		fn into(self) -> [u8; 32] {
+			let mut buf: [u8; 32] = Default::default();
+			for (i, b) in self.0.iter().enumerate() {
+				buf[i] = *b
+			}
+			buf
 		}
 	}
 
@@ -359,128 +395,39 @@ pub mod doughnut {
 		}
 	}
 
-	/// Test transaction
-	#[derive(PartialEq, Eq, Clone, Encode, Decode)]
-	pub struct TestXt<Call, Doughnut>{
-		/// The extrinsic signer, if any
-		pub sender: Option<TestAccountId>,
-		/// The nonce/index
-		pub index: u64,
-		/// Target runtime call
-		pub function: Call,
-		/// An attached doughnut, if any
-		pub doughnut: Option<Doughnut>,
-	}
-
-	impl<Call, Doughnut> TestXt<Call, Doughnut> {
-		/// Create a new TestXt with Doughnut attached
-		pub fn new(sender: Option<u64>, index: u64, function: Call, doughnut: Option<Doughnut>) -> Self {
-			TestXt {
-				sender: sender.map(|id| TestAccountId::new(id)),
-				index,
-				function,
-				doughnut: doughnut,
-			}
-		}
-	}
-
-	impl<Call, Doughnut> Serialize for TestXt<Call, Doughnut>
-		where
-			TestXt<Call, Doughnut>: Encode,
-	{
-		fn serialize<S>(&self, seq: S) -> Result<S::Ok, S::Error> where S: Serializer {
-			self.using_encoded(|bytes| seq.serialize_bytes(bytes))
-		}
-	}
-
-	impl<Call, Doughnut: Debug> Debug for TestXt<Call, Doughnut> {
-		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-			// TODO: Add function
-			write!(f, "TestXt({:?}, {:?}, {:?})", self.sender, self.index, self.doughnut)
-		}
-	}
-
-	impl<Call, Doughnut, Context> Checkable<Context> for TestXt<Call, Doughnut>{
-		type Checked = Self;
-		fn check(self, _: &Context) -> Result<Self::Checked, &'static str> { Ok(self) }
-	}
-
-	impl<Call: Codec + Sync + Send, Extra> traits::Extrinsic for TestXt<Call, Extra> {
-		type Call = Call;
-
-		fn is_signed(&self) -> Option<bool> {
-			Some(self.sender.is_some())
-		}
-
-		fn new_unsigned(_c: Call) -> Option<Self> {
-			None
-		}
-	}
-
-	impl<Origin, Call, Extra> Applyable for TestXt<Call, Extra> where
-		Call: 'static + Sized + Send + Sync + Clone + Eq + Codec + Debug + Dispatchable<Origin=Origin>,
-		Extra: SignedExtension<AccountId=TestAccountId, Call=Call>,
-		Origin: From<Option<TestAccountId>>
-	{
-		type AccountId = TestAccountId;
-		type Call = Call;
-
-		fn sender(&self) -> Option<&TestAccountId> { self.sender.as_ref() }
-
-		/// Checks to see if this is a valid *transaction*. It returns information on it if so.
-		fn validate<U: ValidateUnsigned<Call=Self::Call>>(&self,
-			_info: DispatchInfo,
-			_len: usize,
-		) -> TransactionValidity {
-			TransactionValidity::Valid(Default::default())
-		}
-
-		/// Executes all necessary logic needed prior to dispatch and deconstructs into function call,
-		/// index and sender.
-		fn dispatch(self,
-			info: DispatchInfo,
-			len: usize,
-		) -> Result<DispatchResult, DispatchError> {
-			let maybe_who = if let (Some(who), Some(extra)) = (self.sender, self.doughnut) {
-				Extra::pre_dispatch(extra, &who, &self.function, info, len)?;
-				Some(who)
-			} else {
-				Extra::pre_dispatch_unsigned(&self.function, info, len)?;
-				None
-			};
-			Ok(self.function.dispatch(maybe_who.into()))
-		}
-	}
-
-	impl<Call, Doughnut> Doughnuted for TestXt<Call, Doughnut> where
-		Doughnut: Clone + Decode + Encode + DoughnutApi,
-	{
-		type Doughnut = Doughnut;
-		fn doughnut(&self) -> Option<&Self::Doughnut> {
-			self.doughnut.as_ref()
-		}
-	}
-
 	/// A test doughnut
 	#[derive(Clone, Debug, Encode, Decode, PartialEq, Eq)]
-	pub struct DummyDoughnut {
+	pub struct TestDoughnut {
 		/// The issuer ID
 		pub issuer: TestAccountId,
 		/// The holder ID
 		pub holder: TestAccountId,
+		/// Whether this doughnut signature should be considered valid or not
+		pub signature_should_validate: bool,
 	}
 
-	impl DoughnutApi for DummyDoughnut {
+	impl fmt::Display for TestDoughnut {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			write!(f, "TestDoughnut(issuer: {:?}, holder: {:?})", self.issuer, self.holder)
+		}
+	}
+
+	impl DoughnutApi for TestDoughnut {
 		type PublicKey = TestAccountId;
-		type Signature = Vec<u8>;
+		type Signature = [u8; 64];
 		type Timestamp = u32;
 		fn holder(&self) -> Self::PublicKey { self.holder.clone() }
 		fn issuer(&self) -> Self::PublicKey { self.issuer.clone() }
 		fn expiry(&self) -> Self::Timestamp { u32::max_value() }
-    fn not_before(&self) -> Self::Timestamp { u32::min_value() }
+		fn not_before(&self) -> Self::Timestamp { 0 }
 		fn payload(&self) -> Vec<u8> { Default::default() }
-		fn signature(&self) -> Self::Signature { Default::default() }
-    fn signature_version(&self) -> u8 { 255 }
+		fn signature(&self) -> Self::Signature { 
+			let mut sig = [0u8; 64];
+			// Flag to signal `DougnutVerify` mock impl that this signature is valid or not
+			sig[0] = self.signature_should_validate as u8;
+			sig
+		}
+		fn signature_version(&self) -> u8 { 0 }
 		fn get_domain(&self, _domain: &str) -> Option<&[u8]> { None }
 	}
 }

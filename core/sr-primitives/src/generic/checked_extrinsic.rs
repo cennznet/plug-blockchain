@@ -28,8 +28,8 @@ use crate::transaction_validity::TransactionValidity;
 /// Definition of something that the external world might want to say; its
 /// existence implies that it has been checked and is good, particularly with
 /// regards to the signature.
+#[cfg_attr(any(feature = "std", test), derive(Debug))]
 #[derive(PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "std", derive(Debug))]
 pub struct CheckedExtrinsic<AccountId, Call, Extra> {
 	/// Who this purports to be from and the number of extrinsics have come before
 	/// from the same signer, if anyone (note this is not a signature).
@@ -79,12 +79,11 @@ where
 		len: usize,
 	) -> Result<DispatchResult, DispatchError> {
 		let (pre, res) = if let Some((id, extra)) = self.signed {
-			let maybe_doughnut = extra.doughnut();
-			let pre = Extra::pre_dispatch(extra.clone(), &id, &self.function, info, len)?;
+			let pre = Extra::pre_dispatch(&extra, &id, &self.function, info, len)?;
 
-			if let Some(doughnut) = maybe_doughnut {
+			if let Some(doughnut) = extra.doughnut() {
 				// A delegated transaction
-				(pre, self.function.dispatch(Origin::from((Some(doughnut.issuer()), Some(doughnut.clone())))))
+				(pre, self.function.dispatch(Origin::from((Some(doughnut.issuer()), Some(doughnut)))))
 			} else {
 				// An ordinary signed transaction
 				(pre, self.function.dispatch(Origin::from((Some(id), None))))

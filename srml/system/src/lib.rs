@@ -106,13 +106,14 @@ use sr_primitives::transaction_validity::{
 use sr_primitives::traits::{self, CheckEqual, SimpleArithmetic, Zero, SignedExtension, Convert,
 	SimpleBitOps, Hash, Member, MaybeDisplay, EnsureOrigin, DispatchError, SaturatedConversion,
 	MaybeSerializeDebugButNotDeserialize, MaybeSerializeDebug, StaticLookup, One, Bounded, Lookup,
-	DoughnutApi,
 };
+// publically exported for use by `srml/support/src/origin.rs`
+pub use sr_primitives::traits::{DoughnutApi};
 use primitives::storage::well_known_keys;
 use srml_support::{
 	storage, decl_module, decl_event, decl_storage, StorageDoubleMap, StorageValue, StorageMap,
 	Parameter, for_each_tuple, traits::{Contains, Get},
-	additional_traits::DispatchVerifier as DispatchVerifierT,
+	additional_traits::{DispatchVerifier as DispatchVerifierT, MaybeDoughnutRef},
 };
 use safe_mix::TripletMix;
 use codec::{Encode, Decode};
@@ -172,7 +173,7 @@ pub fn extrinsics_data_root<H: Hash>(xts: Vec<Vec<u8>>) -> H::Output {
 
 pub trait Trait: 'static + Eq + Clone {
 	/// The aggregated `Origin` type used by dispatchable calls.
-	type Origin: Clone + Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>> + From<RawOrigin<Self::AccountId, Self::Doughnut>>;
+	type Origin: Into<Result<RawOrigin<Self::AccountId, Self::Doughnut>, Self::Origin>> + From<RawOrigin<Self::AccountId, Self::Doughnut>> + MaybeDoughnutRef<Doughnut=Self::Doughnut>;
 
 	/// The aggregated `Call` type.
 	type Call;
@@ -345,10 +346,11 @@ pub enum RawOrigin<AccountId, Doughnut> {
 	Root,
 	/// It is signed by some public key and we provide the `AccountId`.
 	Signed(AccountId),
-	/// It is signed by some public key and we provide the `AccountId`.
-	/// It also has an attached doughnut delegation proof
-	/// The runtime will allow `AccountId` to act with delegated authority
-	/// on behalf of the Doughnut issuer, as set out in the Doughnut's contract.
+	/// This dispatch uses a doughnut delegation proof.
+	/// The runtime will replace the extrinsic signer's `AccountId` with the Doughnut issuer's PublicKey after validating it.
+	/// i.e. a transformation like: `RawOrigin::Signed(signer) => RawOrigin::Delegated(doughnut.issuer(), doughnut)` occurs.
+	/// The `origin` keeps the doughnut proof so that the runtime is aware of the delegation having taken place at all times
+	/// during the dispatch execution.
 	Delegated(AccountId, Doughnut),
 	/// It is signed by nobody, can be either:
 	/// * included and agreed upon by the validators anyway,
@@ -492,21 +494,6 @@ impl<
 	}
 }
 
-pub struct EnsureDelegated<AccountId, Doughnut>(::rstd::marker::PhantomData<(AccountId, Doughnut)>);
-impl<
-	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
-	AccountId,
-	Doughnut,
-> EnsureOrigin<O> for EnsureDelegated<AccountId, Doughnut> {
-	type Success = (AccountId, Doughnut);
-	fn try_origin(o: O) -> Result<Self::Success, O> {
-		o.into().and_then(|o| match o {
-			RawOrigin::Delegated(who, doughnut) => Ok((who, doughnut)),
-			r => Err(O::from(r)),
-		})
-	}
-}
-
 pub struct EnsureSignedBy<Who, AccountId, Doughnut>(::rstd::marker::PhantomData<(Who, AccountId, Doughnut)>);
 impl<
 	O: Into<Result<RawOrigin<AccountId, Doughnut>, O>> + From<RawOrigin<AccountId, Doughnut>>,
@@ -552,20 +539,8 @@ pub fn ensure_signed<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result
 	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
 {
 	match o.into() {
-		Ok(RawOrigin::Signed(t)) => Ok(t),
+		Ok(RawOrigin::Signed(t)) | Ok(RawOrigin::Delegated(t, _)) => Ok(t),
 		_ => Err("bad origin: expected to be a signed origin"),
-	}
-}
-
-/// Ensure that the origin `o` represents a signed extrinsic (i.e. transaction) with a doughnut delegation proof.
-/// Returns `Ok` with the account that signed the extrinsic and the attached doughnut or an `Err` otherwise.
-pub fn ensure_delegated<OuterOrigin, AccountId, Doughnut>(o: OuterOrigin) -> Result<(AccountId, Doughnut), &'static str>
-	where OuterOrigin: Into<Result<RawOrigin<AccountId, Doughnut>, OuterOrigin>>
-{
-	// TODO: Avoid consuming here, need a ref based check to get doughnut ref.
-	match o.into() {
-		Ok(RawOrigin::Delegated(who, doughnut)) => Ok((who, doughnut)),
-		_ => Err("bad origin: expected to be a delegated origin"),
 	}
 }
 
@@ -955,7 +930,7 @@ impl<T: Trait + Send + Sync> SignedExtension for CheckWeight<T> {
 	fn additional_signed(&self) -> rstd::result::Result<(), &'static str> { Ok(()) }
 
 	fn pre_dispatch(
-		self,
+		&self,
 		_who: &Self::AccountId,
 		_call: &Self::Call,
 		info: DispatchInfo,
@@ -1019,7 +994,7 @@ impl<T: Trait> SignedExtension for CheckNonce<T> {
 	fn additional_signed(&self) -> rstd::result::Result<(), &'static str> { Ok(()) }
 
 	fn pre_dispatch(
-		self,
+		&self,
 		who: &Self::AccountId,
 		_call: &Self::Call,
 		_info: DispatchInfo,
@@ -1241,9 +1216,16 @@ mod tests {
 
 	#[test]
 	fn origin_works() {
-		let o = Origin::from(RawOrigin::<u64>::Signed(1u64));
-		let x: Result<RawOrigin<u64>, Origin> = o.into();
-		assert_eq!(x, Ok(RawOrigin::<u64>::Signed(1u64)));
+		let o = Origin::from(RawOrigin::<u64, ()>::Signed(1u64));
+		let x: Result<RawOrigin<u64, ()>, Origin> = o.into();
+		assert_eq!(x, Ok(RawOrigin::<u64, ()>::Signed(1u64)));
+	}
+
+	#[test]
+	fn delegated_origin_works() {
+		let o = Origin::from(RawOrigin::<u64, ()>::Delegated(1u64, ()));
+		let x: Result<RawOrigin<u64, ()>, Origin> = o.into();
+		assert_eq!(x, Ok(RawOrigin::<u64, ()>::Delegated(1u64, ())));
 	}
 
 	#[test]

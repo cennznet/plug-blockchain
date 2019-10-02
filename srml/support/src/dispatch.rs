@@ -1053,16 +1053,18 @@ macro_rules! decl_module {
 					$fn_vis fn $fn_name (
 						$from $(, $param_name : $param )*
 					) $( -> $result )* {
+						// Trait imports for doughnut dispatch verification
+						use $crate::additional_traits::MaybeDoughnutRef;
 						use $crate::dispatch::DispatchVerifier;
-						// Check if this is a doughnut delegated dispatch and whether it is authorized
-						if let Ok((_who, doughnut)) = $system::ensure_delegated($from.clone()) {
+						// Check whether `origin` is acting with delegated authority (i.e. doughnut attached).
+						if let Some(doughnut) = &$from.doughnut() {
+							// Ensure the doughnut authorizes the current call
 							let _ = <T as $system::Trait>::DispatchVerifier::verify(
-								&doughnut,
-								env!("CARGO_PKG_NAME"), // module
-								stringify!($fn_name),   // method
+								doughnut,
+								env!("CARGO_PKG_NAME"),			// module
+								stringify!($fn_name)				// method
 							)?;
 						}
-
 						$( $impl )*
 					}
 				}
@@ -1599,10 +1601,12 @@ mod tests {
 	use super::*;
 	use crate::sr_primitives::traits::{OnInitialize, OnFinalize};
 	use sr_primitives::weights::{DispatchInfo, DispatchClass};
-	use crate::additional_traits::DispatchVerifier;
+	// TODO: Why isn't dispatch macro expansion importing this?
+	// `Origin = u32`, needs to change to a type that impl `MaybeDoughnutRef`
+	use crate::additional_traits::{DispatchVerifier, MaybeDoughnutRef};
 
 	pub trait Trait: system::Trait + Sized where Self::AccountId: From<u32> {
-		type Origin;
+		type Origin: MaybeDoughnutRef<Doughnut=()>;
 		type BlockNumber: Into<u32>;
 		type Call: From<Call<Self>>;
 	}
@@ -1710,8 +1714,17 @@ mod tests {
 
 	pub struct TraitImpl {}
 
+	pub struct MockOrigin(pub u32);
+
+	impl MaybeDoughnutRef for MockOrigin {
+		type Doughnut = ();
+		fn doughnut(&self) -> Option<&Self::Doughnut> {
+			None
+		}
+	}
+
 	impl Trait for TraitImpl {
-		type Origin = u32;
+		type Origin = MockOrigin;
 		type BlockNumber = u32;
 		type Call = OuterCall;
 	}
@@ -1719,7 +1732,7 @@ mod tests {
 	type Test = Module<TraitImpl>;
 
 	impl_outer_dispatch! {
-		pub enum OuterCall for TraitImpl where origin: u32 {
+		pub enum OuterCall for TraitImpl where origin: MockOrigin {
 			self::Test,
 		}
 	}

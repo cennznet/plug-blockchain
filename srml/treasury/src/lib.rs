@@ -423,8 +423,8 @@ mod tests {
 	}
 	impl Trait for Test {
 		type Currency = balances::Module<Test>;
-		type ApproveOrigin = system::EnsureRoot<u64>;
-		type RejectOrigin = system::EnsureRoot<u64>;
+		type ApproveOrigin = system::EnsureRoot<u64, ()>;
+		type RejectOrigin = system::EnsureRoot<u64, ()>;
 		type Event = ();
 		type MintedForSpending = ();
 		type ProposalRejection = ();
