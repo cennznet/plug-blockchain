@@ -17,7 +17,7 @@ primitives = { package = "substrate-primitives", path = "../../core/primitives",
 [dev-dependencies]
 balances = { package = "srml-balances", path = "../balances" }
 hex-literal = "0.2.0"
-prml-doughnut = { path = "../../prml/doughnut", default-features = false, features = ["mock"] }
+prml-doughnut = { path = "../../prml/doughnut", features = ["mock"] }
 timestamp = { package = "srml-timestamp", path = "../timestamp", default-features = false }
 srml-indices = { path = "../indices" }
 
