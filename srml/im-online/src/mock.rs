@@ -118,6 +118,8 @@ impl system::Trait for Runtime {
 	type MaximumBlockLength = MaximumBlockLength;
 	type AvailableBlockRatio = AvailableBlockRatio;
 	type Version = ();
+	type Doughnut = ();
+	type DispatchVerifier = ();
 }
 
 parameter_types! {
