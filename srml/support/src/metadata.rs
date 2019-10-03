@@ -232,7 +232,7 @@ mod tests {
 	use crate::traits::Get;
 
 	mod system {
-		use crate::dispatch::DispatchVerifier as DispatchVerifierT;
+		use crate::additional_traits::DispatchVerifier as DispatchVerifierT;
 		use super::*;
 
 		pub trait Trait {
