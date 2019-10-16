@@ -1,5 +1,5 @@
-// Copyright (C) 2019 Centrality Investments Limited
-// This file is part of CENNZnet.
+// Copyright (C) 2019 Plug New Zealand Limited
+// This file is part of Plug.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
