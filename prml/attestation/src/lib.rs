@@ -46,44 +46,44 @@ use support::{decl_event, decl_module, decl_storage, dispatch::Result, StorageMa
 use system::ensure_signed;
 
 pub trait Trait: system::Trait {
-    type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
+	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 }
 
 type AttestationTopic = U256;
 type AttestationValue = U256;
 
 decl_module! {
-    pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-        fn deposit_event<T>() = default;
+	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+		fn deposit_event<T>() = default;
 
-        /// Create a new claim
-        pub fn set_claim(origin, holder: T::AccountId, topic: AttestationTopic, value: AttestationValue) -> Result {
-            let issuer = ensure_signed(origin)?;
+		/// Create a new claim
+		pub fn set_claim(origin, holder: T::AccountId, topic: AttestationTopic, value: AttestationValue) -> Result {
+			let issuer = ensure_signed(origin)?;
 
-            Self::create_claim(holder, issuer, topic, value)?;
-            Ok(())
-        }
+			Self::create_claim(holder, issuer, topic, value)?;
+			Ok(())
+		}
 
-        /// Create a new claim where the holder and issuer are the same person
-        pub fn set_self_claim(origin, topic: AttestationTopic, value: AttestationValue) -> Result {
-            let holder_and_issuer = ensure_signed(origin)?;
+		/// Create a new claim where the holder and issuer are the same person
+		pub fn set_self_claim(origin, topic: AttestationTopic, value: AttestationValue) -> Result {
+			let holder_and_issuer = ensure_signed(origin)?;
 
-            Self::create_claim(holder_and_issuer.clone(), holder_and_issuer, topic, value)?;
-            Ok(())
-        }
+			Self::create_claim(holder_and_issuer.clone(), holder_and_issuer, topic, value)?;
+			Ok(())
+		}
 
-        /// Remove a claim, only the original issuer can remove a claim
-        pub fn remove_claim(origin, holder: T::AccountId, topic: AttestationTopic) -> Result {
-            let issuer = ensure_signed(origin)?;
-            <Issuers<T>>::mutate(&holder,|issuers| issuers.retain(|vec_issuer| *vec_issuer != issuer));
-            <Topics<T>>::mutate((holder.clone(), issuer.clone()),|topics| topics.retain(|vec_topic| *vec_topic != topic));
-            <Values<T>>::remove((holder.clone(), issuer.clone(), topic));
+		/// Remove a claim, only the original issuer can remove a claim
+		pub fn remove_claim(origin, holder: T::AccountId, topic: AttestationTopic) -> Result {
+			let issuer = ensure_signed(origin)?;
+			<Issuers<T>>::mutate(&holder,|issuers| issuers.retain(|vec_issuer| *vec_issuer != issuer));
+			<Topics<T>>::mutate((holder.clone(), issuer.clone()),|topics| topics.retain(|vec_topic| *vec_topic != topic));
+			<Values<T>>::remove((holder.clone(), issuer.clone(), topic));
 
-            Self::deposit_event(RawEvent::ClaimRemoved(holder, issuer, topic));
+			Self::deposit_event(RawEvent::ClaimRemoved(holder, issuer, topic));
 
-            Ok(())
-        }
-    }
+			Ok(())
+		}
+	}
 }
 
 decl_event!(
@@ -94,48 +94,48 @@ decl_event!(
 );
 
 decl_storage! {
-    trait Store for Module<T: Trait> as Attestation {
-        /// The maps are layed out to support the nested structure shown below in JSON, will look to optimise later.
-        ///
-        /// {
-        ///   holder: {
-        ///     issuer: {
-        ///       topic: value
-        ///     }
-        ///   }
-        /// }
-        ///
+	trait Store for Module<T: Trait> as Attestation {
+		/// The maps are layed out to support the nested structure shown below in JSON, will look to optimise later.
+		///
+		/// {
+		///   holder: {
+		///	 issuer: {
+		///	   topic: value
+		///	 }
+		///   }
+		/// }
+		///
 
-        /// A map of HolderId => Vec<IssuerId>
-        Issuers: map T::AccountId => Vec<T::AccountId>;
-        /// A map of (HolderId, IssuerId) => Vec<AttestationTopic>
-        Topics: map (T::AccountId, T::AccountId) => Vec<AttestationTopic>;
-        /// A map of (HolderId, IssuerId, AttestationTopic) => AttestationValue
-        Values: map (T::AccountId, T::AccountId, AttestationTopic) => AttestationValue;
-    }
+		/// A map of HolderId => Vec<IssuerId>
+		Issuers: map T::AccountId => Vec<T::AccountId>;
+		/// A map of (HolderId, IssuerId) => Vec<AttestationTopic>
+		Topics: map (T::AccountId, T::AccountId) => Vec<AttestationTopic>;
+		/// A map of (HolderId, IssuerId, AttestationTopic) => AttestationValue
+		Values: map (T::AccountId, T::AccountId, AttestationTopic) => AttestationValue;
+	}
 }
 
 impl<T: Trait> Module<T> {
-    fn create_claim(
-        holder: T::AccountId,
-        issuer: T::AccountId,
-        topic: AttestationTopic,
-        value: AttestationValue,
-    ) -> Result {
-        <Issuers<T>>::mutate(&holder, |issuers| {
-            if !issuers.contains(&issuer) {
-                issuers.push(issuer.clone())
-            }
-        });
+	fn create_claim(
+		holder: T::AccountId,
+		issuer: T::AccountId,
+		topic: AttestationTopic,
+		value: AttestationValue,
+	) -> Result {
+		<Issuers<T>>::mutate(&holder, |issuers| {
+			if !issuers.contains(&issuer) {
+				issuers.push(issuer.clone())
+			}
+		});
 
-        <Topics<T>>::mutate((holder.clone(), issuer.clone()), |topics| {
-            if !topics.contains(&topic) {
-                topics.push(topic)
-            }
-        });
+		<Topics<T>>::mutate((holder.clone(), issuer.clone()), |topics| {
+			if !topics.contains(&topic) {
+				topics.push(topic)
+			}
+		});
 
-        <Values<T>>::insert((holder.clone(), issuer.clone(), topic), value);
-        Self::deposit_event(RawEvent::ClaimSet(holder, issuer, topic, value));
-        Ok(())
-    }
+		<Values<T>>::insert((holder.clone(), issuer.clone(), topic), value);
+		Self::deposit_event(RawEvent::ClaimSet(holder, issuer, topic, value));
+		Ok(())
+	}
 }
