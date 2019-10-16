@@ -5,22 +5,16 @@ authors = ["Centrality Developers <support@centrality.ai>"]
 edition = "2018"
 
 [dependencies]
-parity-codec = { version = "3.5.4", default-features = false, features = ["derive"] }
+codec = { package = "parity-scale-codec", version = "1.0.0", default-features = false, features = ["derive"] }
 primitives = { package = "substrate-primitives", git = "https://github.com/cennznet/plug-blockchain", default-features = false }
-runtime-primitives = { package = "sr-primitives", git = "https://github.com/cennznet/plug-blockchain", default-features = false }
-sr-std = { git = "https://github.com/cennznet/plug-blockchain", default-features = false }
-sr-io = { git = "https://github.com/cennznet/plug-blockchain", default-features = false }
-srml-support = { git = "https://github.com/cennznet/plug-blockchain", default-features = false }
-srml-system = { git = "https://github.com/cennznet/plug-blockchain", default-features = false }
+support = { package = "srml-support", git = "https://github.com/cennznet/plug-blockchain", default-features = false }
+system = { package = "srml-system", git = "https://github.com/cennznet/plug-blockchain", default-features = false }
 
 [features]
 default = ["std"]
 std = [
-	"parity-codec/std",
+	"codec/std",
 	"primitives/std",
-	"runtime-primitives/std",
-	"sr-std/std",
-	"sr-io/std",
-	"srml-support/std",
-	"srml-system/std",
+	"support/std",
+	"system/std",
 ]
