@@ -31,10 +31,6 @@
 //! The user of the module must convert whatever value that they would like to store into a value that can be stored as a U256.
 //!
 //! It is recommended that Topic be a string value converted to hex and stored on the blockchain as a U256.
-//! Value is typically the hash of an off-chain attestation document but can be any value that fits the application's needs.
-//!
-//!
-//! We recommend that you use the Attestation JavaScript SDK when working with this module. The SDK can be found at https://github.com/cennznet/api.js/tree/master/packages/crml-attestation
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
