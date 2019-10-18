@@ -255,7 +255,7 @@ pub fn current_total_payout_for_duration(duration: u64) -> u64 {
 	let res = inflation::compute_total_payout(
 		<Test as Trait>::RewardCurve::get(),
 		<Module<Test>>::slot_stake() * 2,
-		GenericAsset::total_issuance(&STAKING_ASSET_ID), // fudge staking asset total issuance to produce reward amount
+		GenericAsset::total_issuance(&STAKING_ASSET_ID),
 		duration,
 	);
 
