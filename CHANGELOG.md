@@ -6,21 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2019-21-10
-
-## Changed
-`srml/staking/*`
-- Add `RewardCurrency` type to allow paying out staking rewards in a different currency to the staked currency
-- Change `fn make_payout()` so that RewardCurrency is paid to the stash account and not added to the total stake, if the reward currency is not the staked currency
-
-## [1.0.0] - 2019-17-10
+## [1.0.0] - 2019-10-21
 
 ## Added
+
 `prml/attestation/*`
 - Added attestation runtime module
-
-## [1.0.0] - 2019-16-10
-### Added
 
 `prml/doughnut/*`
 - Add `PlugDoughnut` wrapper struct to allow doughnut integration with `SignedExtension` hooks  
@@ -39,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 `core/sr-primitives/src/traits.rs`
 - Make trait `SignedExtension::pre_dispatch` method receive self by reference (`&self`), instead of move (`self`)
+
+`srml/staking/*`
+- Add `RewardCurrency` type to allow paying out staking rewards in a different currency to the staked currency
+- Change `fn make_payout()` so that RewardCurrency is paid to the stash account and not added to the total stake, if the reward currency is not the staked currency
 
 `srml/system/src/lib.rs` and `srml/support/src/origin.rs`
 - Add `DelegatedOrigin` variant to `RawOrigin` for delegated transactions
