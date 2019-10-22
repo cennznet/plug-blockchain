@@ -91,4 +91,4 @@ jobs:
           name: Run tests
           command: |
             cargo test --all
-          no_output_timeout: 30m
+          no_output_timeout: 60m
