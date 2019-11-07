@@ -258,8 +258,10 @@ impl Peerset {
 
 	fn on_report_peer(&mut self, peer_id: PeerId, score_diff: i32) {
 		// Hotfix: for invulnerable peer connection, check whether the node peer is reserved
-		let reserved = self.data.get_priority_group(RESERVED_NODES).unwrap_or_default();
-		let is_reserved_peer = reserved.contains(&peer_id);
+		let is_reserved_peer = match self.data.get_priority_group(RESERVED_NODES) {
+			Some(reserved) => reserved.contains(&peer_id),
+			None => false,
+		};
 
 		// We want reputations to be up-to-date before adjusting them.
 		self.update_time();
