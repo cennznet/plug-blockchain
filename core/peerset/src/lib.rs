@@ -259,7 +259,7 @@ impl Peerset {
 	fn on_report_peer(&mut self, peer_id: PeerId, score_diff: i32) {
 		// Hotfix: for invulnerable peer connection, check whether the node peer is reserved
 		let reserved = self.data.get_priority_group(RESERVED_NODES).unwrap_or_default();
-		let isReservedPeer = reserved.contains(&peer_id);
+		let is_reserved_peer = reserved.contains(&peer_id);
 
 		// We want reputations to be up-to-date before adjusting them.
 		self.update_time();
@@ -268,7 +268,7 @@ impl Peerset {
 			peersstate::Peer::Connected(mut peer) => {
 				peer.add_reputation(score_diff);
 				// Only check reputation of non-reserved nodes
-				if !isReservedPeer && peer.reputation() < BANNED_THRESHOLD {
+				if !is_reserved_peer && peer.reputation() < BANNED_THRESHOLD {
 					peer.disconnect();
 					self.message_queue.push_back(Message::Drop(peer_id));
 				}
@@ -676,7 +676,7 @@ mod tests {
 			assert_eq!(Stream::poll_next(Pin::new(&mut peerset), cx), Poll::Pending);
 
 			// Reserved node should be accepted.
-			peerset.incoming(peer_id.clone(), IncomingIndex(1));
+			peerset.incoming(reserved_peer.clone(), IncomingIndex(1));
 			while let Poll::Ready(msg) = Stream::poll_next(Pin::new(&mut peerset), cx) {
 				assert_eq!(msg.unwrap(), Message::Accept(IncomingIndex(1)));
 			}
