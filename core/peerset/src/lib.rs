@@ -208,6 +208,13 @@ impl Peerset {
 	}
 
 	fn on_remove_reserved_peer(&mut self, peer_id: PeerId) {
+		let reputation = match self.data.peer(&peer_id) {
+			peersstate::Peer::Connected(peer) => peer.reputation(),
+			peersstate::Peer::NotConnected(peer) => peer.reputation(),
+			peersstate::Peer::Unknown(_) => 0,
+		};
+		trace!(target: "peerset", "Removing reserved peer {:?} with reputation {}", &peer_id, reputation);
+
 		let mut reserved = self.data.get_priority_group(RESERVED_NODES).unwrap_or_default();
 		reserved.remove(&peer_id);
 		self.data.set_priority_group(RESERVED_NODES, reserved);
@@ -269,6 +276,7 @@ impl Peerset {
 				peer.add_reputation(score_diff);
 				// Only check reputation of non-reserved nodes
 				if !is_reserved_peer && peer.reputation() < BANNED_THRESHOLD {
+					trace!(target: "peerset", "Disconnecting from {:?} because reputation {} is below {}", &peer_id, peer.reputation(), BANNED_THRESHOLD);
 					peer.disconnect();
 					self.message_queue.push_back(Message::Drop(peer_id));
 				}
@@ -409,7 +417,7 @@ impl Peerset {
 				entry.disconnect();
 			}
 			peersstate::Peer::NotConnected(_) | peersstate::Peer::Unknown(_) =>
-				error!(target: "peerset", "Received dropped() for non-connected node"),
+				error!(target: "peerset", "Received dropped() for non-connected node {}", peer_id),
 		}
 
 		self.alloc_slots();
@@ -515,6 +523,7 @@ mod tests {
 	use futures::prelude::*;
 	use super::{PeersetConfig, Peerset, Message, IncomingIndex, BANNED_THRESHOLD};
 	use std::{pin::Pin, task::Poll, thread, time::Duration};
+	use super::peersstate;
 
 	fn assert_messages(mut peerset: Peerset, messages: Vec<Message>) -> Peerset {
 		for expected_message in messages {
@@ -652,39 +661,82 @@ mod tests {
 		futures::executor::block_on(fut);
 	}
 
-
 	#[test]
-	fn test_peerset_reserved_node_not_banned() {
-		let bootnode = PeerId::random();
-		let reserved_peer = PeerId::random();
-		let config = PeersetConfig {
-			in_peers: 0,
-			out_peers: 1,
-			bootnodes: vec![bootnode],
-			reserved_only: true,
-			reserved_nodes: Vec::new(),
-		};
+	fn test_peerset_node_dropped_with_bad_reputation() {
+		let (mut peerset, _handle) = Peerset::from_config(PeersetConfig {
+			in_peers: 25,
+			out_peers: 25,
+			bootnodes: vec![],
+			reserved_only: false,
+			reserved_nodes: vec![],
+		});
 
-		let (mut peerset, handle) = Peerset::from_config(config);
-		handle.add_reserved_peer(reserved_peer.clone());
+		// Create a new peer to add to peerset
+		let peer_id = PeerId::random();
 
-		// Setting reputation of reserved node under the threshold.
-		handle.report_peer(reserved_peer.clone(), BANNED_THRESHOLD - 1);
-
-		let fut = futures::future::poll_fn(move |cx| {
+		let fut = futures::future::poll_fn(|cx| {
 			// We need one polling for the message to be processed.
 			assert_eq!(Stream::poll_next(Pin::new(&mut peerset), cx), Poll::Pending);
 
-			// Reserved node should be accepted.
-			peerset.incoming(reserved_peer.clone(), IncomingIndex(1));
-			while let Poll::Ready(msg) = Stream::poll_next(Pin::new(&mut peerset), cx) {
+			// The peer connecting should be accepted
+			peerset.incoming(peer_id.clone(), IncomingIndex(1));
+			if let Poll::Ready(msg) = Stream::poll_next(Pin::new(&mut peerset), cx) {
 				assert_eq!(msg.unwrap(), Message::Accept(IncomingIndex(1)));
+			} else {
+				panic!()
 			}
-
 			Poll::Ready(())
 		});
-
 		futures::executor::block_on(fut);
+
+		// Damage the peer's reputation
+		peerset.on_report_peer(peer_id.clone(), BANNED_THRESHOLD - 1);
+
+		let not_connected = match peerset.data.peer(&peer_id) {
+			peersstate::Peer::Connected(_) => false,
+			peersstate::Peer::NotConnected(_) => true,
+			peersstate::Peer::Unknown(_) => false, // unexpected state - so fail
+		};
+
+		assert!(not_connected);
+	}
+
+	#[test]
+	fn test_peerset_invulnerable_to_bad_reputation() {
+		let (mut peerset, _handle) = Peerset::from_config(PeersetConfig {
+			in_peers: 25,
+			out_peers: 25,
+			bootnodes: vec![],
+			reserved_only: false,
+			reserved_nodes: vec![],
+		});
+
+		// Create a new peer to add as a reserved peer to the peerset
+		let peer_id = PeerId::random();
+		peerset.on_add_reserved_peer(peer_id.clone());
+
+		// Check the reserved peer has been added
+		let fut = futures::future::poll_fn(|cx| {
+			if let Poll::Ready(msg) = Stream::poll_next(Pin::new(&mut peerset), cx) {
+				assert_eq!(msg.unwrap(), Message::Connect(peer_id.clone()));
+			} else {
+				panic!()
+			}
+			Poll::Ready(())
+		});
+		futures::executor::block_on(fut);
+
+		// Damage the reserved peer's reputation
+		peerset.on_report_peer(peer_id.clone(), BANNED_THRESHOLD - 1);
+
+		let connected = match peerset.data.peer(&peer_id) {
+			peersstate::Peer::Connected(_) => true,
+			peersstate::Peer::NotConnected(_) => false,
+			peersstate::Peer::Unknown(_) => false, // unexpected state - so fail
+		};
+
+		// Check the reserved peer is still connected
+		assert!(connected);
 	}
 }
 
