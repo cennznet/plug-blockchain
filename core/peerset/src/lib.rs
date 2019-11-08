@@ -225,6 +225,12 @@ impl Peerset {
 	}
 
 	fn on_remove_reserved_peer(&mut self, peer_id: PeerId) {
+		let reputation = match self.data.scores.get_mut(&peer_id) {
+			Some(score) => *score,
+			None => 0
+		};
+		trace!(target: "peerset", "Removing reserved peer {:?} with reputation {}", &peer_id, reputation);
+
 		self.data.in_slots.mark_not_reserved(&peer_id);
 		self.data.out_slots.mark_not_reserved(&peer_id);
 		self.data.discovered.mark_not_reserved(&peer_id);
@@ -266,7 +272,11 @@ impl Peerset {
 			}
 		};
 
-		if score < 0 {
+		// Hotfix: for invulnerable peer connection, check whether the node peer is reserved
+		let is_reserved_node = self.data.in_slots.is_reserved(&peer_id) || self.data.out_slots.is_reserved(&peer_id);
+
+		if !is_reserved_node && score < 0 {
+			trace!(target: "peerset", "Disconnecting from {:?} because reputation {} is below 0", &peer_id, score);
 			// peer will be removed from `in_slots` or `out_slots` in `on_dropped` method
 			if self.data.in_slots.contains(&peer_id) || self.data.out_slots.contains(&peer_id) {
 				self.data.in_slots.remove_peer(&peer_id);
@@ -597,18 +607,51 @@ mod tests {
 		let bootnode2 = PeerId::random();
 		let config = PeersetConfig {
 			in_peers: 0,
-			out_peers: 1,
+			out_peers: 2,
 			bootnodes: vec![bootnode.clone(), bootnode2.clone()],
 			reserved_only: false,
 			reserved_nodes: Vec::new(),
 		};
 
 		let (peerset, handle) = Peerset::from_config(config);
-		handle.report_peer(bootnode2, -1);
+		let peerset = assert_messages(peerset, vec![
+			Message::Connect(bootnode.clone()),
+			Message::Connect(bootnode2.clone()),
+		]);
+
+		handle.report_peer(bootnode2.clone(), -1);
 		handle.report_peer(bootnode.clone(), -1);
 
 		assert_messages(peerset, vec![
+			Message::Drop(bootnode2),
+			Message::Drop(bootnode),
+		]);
+	}
+
+	#[test]
+	fn test_peerset_report_invulnerable() {
+		let bootnode = PeerId::random();
+		let bootnode2 = PeerId::random();
+		let reserved_peer = PeerId::random();
+		let config = PeersetConfig {
+			in_peers: 0,
+			out_peers: 2,
+			bootnodes: vec![bootnode.clone(), bootnode2.clone()],
+			reserved_only: false,
+			reserved_nodes: vec![reserved_peer.clone()],
+		};
+
+		let (peerset, handle) = Peerset::from_config(config);
+		let peerset = assert_messages(peerset, vec![
+			Message::Connect(reserved_peer.clone()),
 			Message::Connect(bootnode.clone()),
+		]);
+		
+		handle.report_peer(reserved_peer.clone(), -1);
+		handle.report_peer(bootnode.clone(), -1);
+
+		// if the reserved_peer is dropped, then the assert_messages will failed
+		assert_messages(peerset, vec![
 			Message::Drop(bootnode)
 		]);
 	}
