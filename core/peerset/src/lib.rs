@@ -266,7 +266,10 @@ impl Peerset {
 			}
 		};
 
-		if score < 0 {
+		// Hotfix: for invulnerable peer connection, check whether the node peer is reserved
+		let is_is_reserved_node = self.data.in_slots.is_reserved(&peer_id) || self.data.out_slots.is_reserved(&peer_id);
+		
+		if !is_is_reserved_node && score < 0 {
 			// peer will be removed from `in_slots` or `out_slots` in `on_dropped` method
 			if self.data.in_slots.contains(&peer_id) || self.data.out_slots.contains(&peer_id) {
 				self.data.in_slots.remove_peer(&peer_id);
