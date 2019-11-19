@@ -81,6 +81,9 @@ fn staging_testnet_config_genesis() -> GenesisConfig {
 	const ENDOWMENT: u128 = 10_000_000 * DOLLARS;
 	const STASH: u128 = 100 * DOLLARS;
 
+	const STAKING_ASSET_ID: u32 = 16_000;
+	const SPENDING_ASSET_ID: u32 = 16_001; 
+
 	let transaction_base_fee = 1 * CENTS;
 	let transaction_byte_fee = 10 * MILLICENTS;
 	let transfer_fee = 1 * CENTS;
@@ -191,8 +194,8 @@ fn staging_testnet_config_genesis() -> GenesisConfig {
 			// ids smaller than 1_000_000 are reserved
 			next_asset_id: 1_000_000,
 			create_asset_stake: 1000,
-			staking_asset_id: 0,
-			spending_asset_id: 1,
+			staking_asset_id: STAKING_ASSET_ID,
+			spending_asset_id: SPENDING_ASSET_ID,
 		}),
 		fees: Some(FeesConfig {
 			_genesis_phantom_data: rstd::marker::PhantomData {},
@@ -269,6 +272,9 @@ pub fn testnet_genesis(
 
 	const STASH: u128 = 1 << 20;
 	const ENDOWMENT: u128 = 1 << 20;
+
+	const STAKING_ASSET_ID: u32 = 16_000;
+	const SPENDING_ASSET_ID: u32 = 16_001; 
 
 	let transaction_base_fee = 1;
 	let transaction_byte_fee = 1;
@@ -375,14 +381,14 @@ pub fn testnet_genesis(
 			authorities: initial_authorities.iter().map(|x| (x.2.clone(), 1)).collect(),
 		}),
 		generic_asset: Some(GenericAssetConfig {
-			assets: vec![0, 1],
+			assets: vec![STAKING_ASSET_ID, SPENDING_ASSET_ID],
 			initial_balance: ENDOWMENT,
 			endowed_accounts: endowed_accounts.clone().into_iter().map(Into::into).collect(),
 			// ids smaller than 1_000_000 are reserved
 			next_asset_id: 1_000_000,
 			create_asset_stake: 1000,
-			staking_asset_id: 0,
-			spending_asset_id: 1,
+			staking_asset_id: STAKING_ASSET_ID,
+			spending_asset_id: SPENDING_ASSET_ID,
 		}),
 		fees: Some(FeesConfig {
 			_genesis_phantom_data: rstd::marker::PhantomData {},
