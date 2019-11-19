@@ -365,20 +365,6 @@ impl<Hash: hash::Hash + Member + Serialize, Ex> ReadyTransactions<Hash, Ex> {
 				return Ok(vec![]);
 			}
 
-			// now check if collective priority is lower than the replacement transaction.
-			let old_priority = {
-				let ready = self.ready.read();
-				replace_hashes
-					.iter()
-					.filter_map(|hash| ready.get(hash))
-					.fold(0u64, |total, tx| total.saturating_add(tx.transaction.transaction.priority))
-			};
-
-			// bail - the transaction has too low priority to replace the old ones
-			if old_priority >= tx.priority {
-				bail!(error::ErrorKind::TooLowPriority(old_priority, tx.priority))
-			}
-
 			replace_hashes.into_iter().cloned().collect::<Vec<_>>()
 		};
 
@@ -523,11 +509,6 @@ mod tests {
 		ready.import(x).unwrap();
 		assert_eq!(ready.get().count(), 2);
 
-		// too low priority
-		let x = WaitingTransaction::new(tx1.clone(), &ready.provided_tags(), &[]);
-		ready.import(x).unwrap_err();
-
-		tx1.priority = 10;
 		let x = WaitingTransaction::new(tx1.clone(), &ready.provided_tags(), &[]);
 		ready.import(x).unwrap();
 

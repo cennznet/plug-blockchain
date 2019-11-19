@@ -616,8 +616,84 @@ mod tests {
 		});
 	}
 
+	// HOTFIX: tx priority is ignored during replacement.
+	// New transactions will replace those with an equivalent `provides` field
+	// This test relies on tx prioirity, so is now redundant.
+	// #[test]
+	// fn should_handle_a_cycle() {
+	// 	// given
+	// 	let mut pool = pool();
+	// 	pool.import(Transaction {
+	// 		data: vec![1u8],
+	// 		bytes: 1,
+	// 		hash: 1,
+	// 		priority: 5u64,
+	// 		valid_till: 64u64,
+	// 		requires: vec![vec![0]],
+	// 		provides: vec![vec![1]],
+	// 	}).unwrap();
+	// 	println!("hash 1");
+	// 	pool.import(Transaction {
+	// 		data: vec![3u8],
+	// 		bytes: 1,
+	// 		hash: 3,
+	// 		priority: 5u64,
+	// 		valid_till: 64u64,
+	// 		requires: vec![vec![1]],
+	// 		provides: vec![vec![2]],
+	// 	}).unwrap();
+	// 	println!("hash 3");
+	// 	assert_eq!(pool.ready().count(), 0);
+	// 	assert_eq!(pool.ready.len(), 0);
+
+	// 	// when
+	// 	pool.import(Transaction {
+	// 		data: vec![2u8],
+	// 		bytes: 1,
+	// 		hash: 2,
+	// 		priority: 5u64,
+	// 		valid_till: 64u64,
+	// 		requires: vec![vec![2]],
+	// 		provides: vec![vec![0]],
+	// 	}).unwrap();
+	// 	println!("hash 2");
+
+	// 	// then
+	// 	{
+	// 		let mut it = pool.ready().into_iter().map(|tx| tx.data[0]);
+	// 		assert_eq!(it.next(), None);
+	// 	}
+	// 	// all transactions occupy the Future queue - it's fine
+	// 	assert_eq!(pool.future.len(), 3);
+
+	// 	// let's close the cycle with one additional transaction
+	// 	let res = pool.import(Transaction {
+	// 		data: vec![4u8],
+	// 		bytes: 1,
+	// 		hash: 4,
+	// 		priority: 50u64,
+	// 		valid_till: 64u64,
+	// 		requires: vec![],
+	// 		provides: vec![vec![0]],
+	// 	}).unwrap();
+	// 	println!("hash 4");
+
+	// 	let mut it = pool.ready().into_iter().map(|tx| tx.data[0]);
+	// 	assert_eq!(it.next(), Some(4));
+	// 	assert_eq!(it.next(), Some(1));
+	// 	assert_eq!(it.next(), Some(3));
+	// 	assert_eq!(it.next(), None);
+	// 	assert_eq!(res, Imported::Ready {
+	// 		hash: 4,
+	// 		promoted: vec![1, 3],
+	// 		failed: vec![2],
+	// 		removed: vec![],
+	// 	});
+	// 	assert_eq!(pool.future.len(), 0);
+	// }
+
 	#[test]
-	fn should_handle_a_cycle() {
+	fn it_should_replace_without_prioritisation() {
 		// given
 		let mut pool = pool();
 		pool.import(Transaction {
@@ -626,62 +702,28 @@ mod tests {
 			hash: 1,
 			priority: 5u64,
 			valid_till: 64u64,
-			requires: vec![vec![0]],
+			requires: vec![],
 			provides: vec![vec![1]],
 		}).unwrap();
-		pool.import(Transaction {
-			data: vec![3u8],
-			bytes: 1,
-			hash: 3,
-			priority: 5u64,
-			valid_till: 64u64,
-			requires: vec![vec![1]],
-			provides: vec![vec![2]],
-		}).unwrap();
-		assert_eq!(pool.ready().count(), 0);
-		assert_eq!(pool.ready.len(), 0);
 
-		// when
+		//when
 		pool.import(Transaction {
-			data: vec![2u8],
+			data: vec![1u8],
 			bytes: 1,
 			hash: 2,
 			priority: 5u64,
 			valid_till: 64u64,
-			requires: vec![vec![2]],
-			provides: vec![vec![0]],
+			requires: vec![],
+			provides: vec![vec![1]],
 		}).unwrap();
+		assert_eq!(pool.ready().count(), 1);
+		assert_eq!(pool.ready.len(), 1);
 
 		// then
 		{
-			let mut it = pool.ready().into_iter().map(|tx| tx.data[0]);
-			assert_eq!(it.next(), None);
+			let mut it = pool.ready().into_iter().map(|tx| tx.hash);
+			assert_eq!(it.next(), Some(2));
 		}
-		// all transactions occupy the Future queue - it's fine
-		assert_eq!(pool.future.len(), 3);
-
-		// let's close the cycle with one additional transaction
-		let res = pool.import(Transaction {
-			data: vec![4u8],
-			bytes: 1,
-			hash: 4,
-			priority: 50u64,
-			valid_till: 64u64,
-			requires: vec![],
-			provides: vec![vec![0]],
-		}).unwrap();
-		let mut it = pool.ready().into_iter().map(|tx| tx.data[0]);
-		assert_eq!(it.next(), Some(4));
-		assert_eq!(it.next(), Some(1));
-		assert_eq!(it.next(), Some(3));
-		assert_eq!(it.next(), None);
-		assert_eq!(res, Imported::Ready {
-			hash: 4,
-			promoted: vec![1, 3],
-			failed: vec![2],
-			removed: vec![],
-		});
-		assert_eq!(pool.future.len(), 0);
 	}
 
 	#[test]
