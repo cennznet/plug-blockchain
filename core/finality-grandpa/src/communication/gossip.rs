@@ -723,7 +723,7 @@ impl<Block: BlockT> network_gossip::Validator<Block> for GossipValidator<Block> 
 
     fn validate(
         &self,
-        context: &mut ValidatorContext<Block>,
+        context: &mut dyn ValidatorContext<Block>,
         who: &PeerId,
         data: &[u8],
     ) -> network_gossip::ValidationResult<Block::Hash> {
