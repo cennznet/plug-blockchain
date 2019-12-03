@@ -165,6 +165,8 @@ impl<Block: BlockT> BlockchainDb<Block> {
 			meta.best_hash = hash;
 		}
 
+		debug!(target: "block_finalized", "updte meta -> is_finalized: {:?}", is_finalized);
+
 		if is_finalized {
 			meta.finalized_number = number;
 			meta.finalized_hash = hash;
